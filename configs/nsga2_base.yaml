@@ -1,0 +1,43 @@
+# 基線：NSGA-II，關閉自適應 drop
+objectives:
+  lambda_importance: 1.0     # 重要性權重
+  lambda_coverage: 0.8       # 覆蓋度權重（標量化用）
+  lambda_redundancy: 0.7     # 冗餘懲罰權重（標量化用）
+
+representations:
+  use: true
+  method: "tfidf"            # tfidf | sbert
+  cache: true
+
+candidates:
+  use: true
+  k: 15
+  by: "score"
+
+redundancy:
+  method: "mmr"
+  lambda: 0.7                # MMR 調和係數（greedy/grasp 用）
+  sim_metric: "cosine"
+  post_threshold: 0.90       # 輸出前冗餘剔除閾值（NSGA-II 後處理）
+
+length_control:
+  unit: "tokens"             # tokens | sentences | chars（後續可擴）
+  max_tokens: 100
+
+optimizer:
+  method: "nsga2"            # 啟用 NSGA-II
+  nsga2:
+    pop_size: 20
+    n_gen: 20
+
+adaptive_drop:
+  enabled: false             # 基線關閉自適應（便於公平 A/B）
+  window: 7
+  adaptation_frequency: 10
+  min_freq: 0.10
+  initial_drop_rate: 0.0
+  min_drop_rate: 0.0
+  max_drop_rate: 0.25
+
+# 可重現性
+seed: 2024

@@ -1,0 +1,43 @@
+# 自適應：NSGA-II，啟用 Callback 每隔若干代調整 per-sentence drop 機率
+objectives:
+  lambda_importance: 1.0
+  lambda_coverage: 1.0
+  lambda_redundancy: 0.7
+
+representations:
+  use: true
+  method: "tfidf"
+  cache: true
+
+candidates:
+  use: true
+  k: 15
+  by: "score"
+
+redundancy:
+  method: "mmr"
+  lambda: 0.9
+  sim_metric: "cosine"
+  post_threshold: 0.96       # 自適應版微放寬，避免輸出前刪句抵銷覆蓋收益
+
+length_control:
+  unit: "tokens"
+  max_tokens: 100
+
+optimizer:
+  method: "nsga2"
+  nsga2:
+    pop_size: 20
+    n_gen: 20
+
+adaptive_drop:
+  enabled: true
+  window: 13                  # 放緩更新：更長視窗更平滑
+  adaptation_frequency: 18   # 放緩更新：降低觸發頻率
+  min_freq: 0.18             # 提高啟動門檻（僅對長期罕見句上調）
+  initial_drop_rate: 0.0
+  min_drop_rate: 0.0
+  max_drop_rate: 0.12        # 降低上限，避免過度壓抑
+
+# 可重現性
+seed: 2024
