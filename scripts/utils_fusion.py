@@ -31,8 +31,8 @@ def index_by_id(rows: List[Dict]) -> Dict[str, Dict]:
 def main():
     ap = argparse.ArgumentParser(description="Build stage2 union input from two Top-K runs")
     ap.add_argument("--input", required=True, help="original processed jsonl (with full sentences)")
-    ap.add_argument("--base_pred", required=True, help="stage1 base predictions.jsonl (e.g., greedy)")
-    ap.add_argument("--bert_pred", required=True, help="stage1 bert predictions.jsonl")
+    ap.add_argument("--base_pred", default=None, help="stage1 base predictions.jsonl (e.g., greedy)")
+    ap.add_argument("--bert_pred", default=None, help="stage1 bert predictions.jsonl")
     ap.add_argument("--graph_pred", default=None, help="optional stage1 graph predictions.jsonl")
     ap.add_argument("--out", required=True, help="output jsonl path for stage2 union")
     ap.add_argument("--cap", type=int, default=None, help="optional cap for union size (e.g., 25)")
@@ -42,8 +42,12 @@ def main():
 
     t0 = time.perf_counter()
     docs = load_jsonl(args.input)
-    base = index_by_id(load_jsonl(args.base_pred))
-    bert = index_by_id(load_jsonl(args.bert_pred))
+    base = {}
+    if args.base_pred:
+        base = index_by_id(load_jsonl(args.base_pred))
+    bert = {}
+    if args.bert_pred:
+        bert = index_by_id(load_jsonl(args.bert_pred))
     graph = {}
     if args.graph_pred:
         graph = index_by_id(load_jsonl(args.graph_pred))
