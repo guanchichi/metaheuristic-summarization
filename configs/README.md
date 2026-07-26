@@ -1,68 +1,93 @@
-﻿# configs 使用說明（結構與範例）
+# configs — 實驗設定
 
-本資料夾存放所有 Pipeline 設定檔。自 2025-09 起，建議採用「按用途與 K 值分層」的結構，避免未來新增 K 變體時越來越混亂。
+> ⚠️ **這些是 legacy 設定。** 它們產生的結果全部是在 test set 上調參得到的（見
+> `docs/research/CODE_AUDIT_IEEE_Access.md` 的 P0-01），**不可用於新論文**。
+> 保留它們只為了重現 `runs/` 底下的既有 artifact。
+> 新架構的設定會依 `docs/research/ARCHITECTURE.md` 的 schema 另外建立。
 
-## 結構總覽
-- Stage1/Base：`configs/stage1/base/k{K}.yaml`
-- Stage1/LLM：`configs/stage1/llm/{bert|roberta|xlnet}/k{K}.yaml`
-- Stage2/Fast：`configs/stage2/fast/3sent.yaml`
-- 歷史/歸檔：`configs/_archive/**`
-- 產生器產物（舊）：`configs/_generated/**`（僅保留參考；建議改用上面結構）
+歷史設定（`_legacy_archive/`）已排除於版本庫外，只存在原作者本機。
 
-## 產生 Stage1 K 變體（建議）
-- 使用腳本：`scripts/gen_stage1_cfg.py`
-- 範例：
-```
-# 產生 Stage1 Base（K=7）
-python scripts/gen_stage1_cfg.py --type base --k 7
-# 產生 Stage1 LLM（K=7，RoBERTa）
-python scripts/gen_stage1_cfg.py --type llm --k 7 --model roberta
-```
-- 生成位置：
-  - `configs/stage1/base/k7.yaml`
-  - `configs/stage1/llm/roberta/k7.yaml`
+---
 
-## 快速使用指令（示例）
-- Stage1 Base（K=20）：
-```
+## 兩階段流程對照
+
+Stage 1 三軌各跑一次 `select_sentences.py`，輸出各自的 `predictions.jsonl`；
+再用 `scripts/utils_fusion.py` 取聯集，Stage 2 在聯集上做最終選句。
+
+| 檔案 | 階段 | optimizer | 說明 |
+|---|---|---|---|
+| `1_Base_NSGA2.yaml` | Stage 1a | `nsga2` | 統計特徵（TF-ISF 0.8 / 句長 0.2 / 句位 0.2），候選 K=40 |
+| `1_LLM_BERT.yaml` | Stage 1b | `bert` | `bert-base-uncased` 重心相似度排序，候選 K=40 |
+| `1_Graph_TextRank.yaml` | Stage 1c | `greedy` | 純圖中心性（graph 權重 1.0），候選來源 `[graph]` |
+| `2_Fusion_Final.yaml` | Stage 2 | `fast_nsga2` | 當家融合設定 |
+
+### Stage 2 的權重掃描
+
+四個設定只差在 objective 權重與融合權重，其餘相同（`max_tokens: 245`、
+`max_sentences: 30`、`pop_size: 100`、`n_gen: 100`、`seed: 2024`）：
+
+| 檔案 | λ_coverage | λ_redundancy | w_base | w_bert |
+|---|---|---|---|---|
+| `2_Fusion_Final.yaml` | 2.5 | 1.2 | 0.5 | 0.5 |
+| `2_Fusion_ExpA.yaml` | 2.5 | 1.2 | 0.3 | **0.7** |
+| `2_Fusion_ExpB.yaml` | **4.0** | 1.2 | 0.5 | 0.5 |
+| `2_Fusion_ExpC.yaml` | 2.5 | **2.0** | 0.5 | 0.5 |
+| `2_Fusion_NoNsga2.yaml` | 2.5 | 1.2 | 0.5 | 0.5 | ← optimizer 改用 `fast_fused`（MMR），NSGA-II ablation |
+
+> 🔴 **`w_bert` 的命名是錯的。** 在 `src/models/extractive/fast_fused.py` 裡，
+> 它加權的是 **TF-IDF centroid 相似度**，不是 BERT 分數。Stage 2 整條路徑沒有任何 PLM。
+> 這是「移除 BERT 只掉 0.0005 ROUGE-1」的真正原因（F-3）。
+> 程式已接受 `w_plm` 作為別名，但語義問題要等重構才解決。
+
+---
+
+## 消融／測試設定
+
+| 檔案 | 變動的單一因素 |
+|---|---|
+| `test_v2_features.yaml` | 啟用 v2 特徵（TF-ISF 加停用詞與 sublinear TF、position 改 inverse、fusion 加交互項），並開 centrality/novelty |
+| `test_v2_tfisf_only.yaml` | 只把 TF-ISF 換成 v2，其餘維持 v1 |
+| `test_coverage_set.yaml` | NSGA-II 的 coverage 改用 `set`（貪婪子模） |
+| `test_coverage_diversity.yaml` | NSGA-II 的 coverage 改用 `diversity`（coverage 減冗餘懲罰） |
+
+> ⚠️ `centrality` 與 `novelty` 在數學上完全反相關（`centrality_norm = 1 - novelty_norm`），
+> 同時給獨立權重是退化的 —— `test_v2_features.yaml` 的那兩個權重實際只有一個自由度。
+
+---
+
+## 使用方式
+
+```bash
 python -m src.pipeline.select_sentences \
-  --config configs/stage1/base/k20.yaml \
+  --config configs/1_Base_NSGA2.yaml \
   --split validation \
-  --input data/processed/validation.jsonl \
+  --input data/processed/<split>.jsonl \
   --run_dir runs \
-  --optimizer nsga2 \
-  --stamp stage1-base-k20
-```
-- Stage1 LLM（K=20，BERT/RoBERTa/XLNet）：
-```
-python -m src.pipeline.select_sentences \
-  --config configs/stage1/llm/roberta/k20.yaml \
-  --split validation \
-  --input data/processed/validation.jsonl \
-  --run_dir runs \
-  --optimizer roberta \
-  --stamp stage1-roberta-k20
-```
-- 聯集 U + Stage2（fast, 3 句）：
-```
-python scripts/build_union_stage2.py \
-  --input data/processed/validation.jsonl \
-  --base_pred runs/<stage1-base>/predictions.jsonl \
-  --bert_pred runs/<stage1-llm>/predictions.jsonl \
-  --out data/processed/validation.stage2.union.k20.jsonl \
-  --cap 25
-
-python -m src.pipeline.select_sentences \
-  --config configs/stage2/fast/3sent.yaml \
-  --split validation \
-  --input data/processed/validation.stage2.union.k20.jsonl \
-  --run_dir runs \
-  --optimizer fast \
-  --stamp stage2-fast-k20
+  --stamp my-run
 ```
 
-## 備註
-- Stage1 Base/LLM 可透過 CLI 的 `--optimizer` 切換方法（base: greedy|grasp|nsga2；llm: bert|roberta|xlnet）。
-- Stage2 僅使用 fast 系列（`fast|fast_grasp|fast_nsga2`）。
-- 舊的 `features_*.yaml` 已移至 `_archive/`（legacy）；示例與文件均指向新結構。
-- 若需一次計時與產出總表，請參考 `scripts/run_two_stage_timed.py`。
+`--optimizer` 可覆寫 config 裡的 `optimizer.method`。
+
+---
+
+## 設定鍵值說明
+
+| 鍵 | 說明 |
+|---|---|
+| `objectives.lambda_*` | 從 Pareto front 選解時的加權（importance / coverage / redundancy） |
+| `objectives.coverage_method` | `max`（預設）/ `set` / `diversity` |
+| `features.weights.*` | 各特徵在 base score 的權重 |
+| `features.{tf_isf,position,fusion}.version` | `v1`（預設）或 `v2` |
+| `graph_params.threshold` | 圖的邊剪枝閾值 τ |
+| `candidates.k` / `sources` / `mode` | 候選池大小、來源（`score`/`position`/`centrality`/`graph`）、`hard`/`soft` |
+| `length_control.unit` | `tokens`（實為**空白切詞**）或 `sentences` |
+| `optimizer.{method,pop_size,n_gen}` | 選句器與 NSGA-II 參數 |
+| `seed` | 全域亂數種子 |
+
+> ⚠️ **`unit: tokens` 其實數的是空白切詞，不是 model token。**
+> 新架構會把 `max_words` / `max_sentences` / `max_model_tokens` 拆成不同欄位
+> （見 `docs/research/ARCHITECTURE.md` §1.2）。
+>
+> ℹ️ `pop_size` / `n_gen` / `seed` 過去**未被程式讀取**（實際一律跑 100/100），
+> 已在 `optimizer_dispatch.py` 修好。因此 legacy run 的 config_used.json
+> 不代表當時真正生效的參數。
