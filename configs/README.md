@@ -13,7 +13,7 @@
 
 | 檔案 | 用途 | 尚未完成 |
 |---|---|---|
-| `phase1_mvp_multinews.yaml` | canonical Multi-News 上隔離 lexical + pinned sentence encoder，固定 route/total budget、RRF 與 document guard，deterministic greedy selector | pinned PLM 與 3-row wiring smoke 已過；尚缺正式 cost、baseline reality check、route unique recall、output budget freeze，未過 gate 前不可跑 test |
+| `phase1_mvp_multinews.yaml` | canonical Multi-News 上隔離 lexical + pinned sentence encoder；top-K proposals、route reservations、RRF selector salience、total cap 與 document guard | provenance-aware 3-row smoke 已過；尚缺正式 cost、baseline reality check、route unique recall、budget freeze，未過 gate 前不可跑 test |
 
 此設定刻意不含 graph 與 NSGA-II：先確認 lexical + semantic MVP 能否勝過同協定 Lead／PacSum，再決定是否擴張完整架構。
 
@@ -90,7 +90,10 @@ python -m src.pipeline.select_sentences \
 | `features.{tf_isf,position,fusion}.version` | `v1`（預設）或 `v2` |
 | `graph_params.threshold` | 圖的邊剪枝閾值 τ |
 | `candidates.k` / `sources` / `mode` | 候選池大小、來源（`score`/`position`/`centrality`/`graph`）、`hard`/`soft` |
-| `candidate_budget.per_route / total` | 新架構的每 route quota 與 selector 最終固定候選數，兩者不可混用 |
+| `candidate_budget.route_top_k` | 每 route 保存與分析的 proposal depth；不是最終池保證配額 |
+| `candidate_budget.min_per_route` | total cap 前優先保留的 route evidence；先保留 route-exclusive proposals 以免 RRF 共識偏誤抹除 unique contribution |
+| `candidate_budget.total` | selector pool 的上限，不從 proposal union／coverage guard 外補句；union 小於上限時允許誠實 underfill |
+| `selector.salience_source` | `rrf_fusion` 會把 normalized provenance fusion 實際送入 selector；`membership_only` 僅供消融 |
 | `compute_budget.mode / enabled_routes` | 目前只實作 validation-frozen `fixed`；宣告 `adaptive` 會直接失敗 |
 | `routes.semantic.*` | sentence encoder 名稱、固定 revision、batch size、`max_model_tokens`；輸出記錄實際 revision 與截斷率 |
 | `routes.graph.*` | 新 graph route 預設 `sparse_knn`；`dense_legacy` 必須明確指定 |

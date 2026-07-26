@@ -31,13 +31,18 @@ compute_budget:
   enabled_routes: [lexical, semantic]
 
 candidate_budget:
-  per_route: 40
+  route_top_k: 40
+  min_per_route: 20
   total: 60
 
 candidates:
   use: true
   mode: hard
   rrf_constant: 60
+
+selector:
+  # Use provenance fusion inside the pool, not only for pool membership.
+  salience_source: rrf_fusion
 
 routes:
   lexical:

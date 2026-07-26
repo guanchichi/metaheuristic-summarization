@@ -95,7 +95,7 @@
 
 **1a 的共同驗收條件**（全部完成才能把上面的 `[~]` 改成 `[x]`）：
 
-- [x] `pip install pytest` 並讓 `tests/` 能跑（2026-07-26：103 passed）
+- [x] `pip install pytest` 並讓 `tests/` 能跑（2026-07-26：108 passed）
 - [ ] 每個 patch 都有對應的 regression test（見 1e）
 - [ ] **條件式**：若保留 SciTLDR stress test，official single-sentence oracle 須重現 R1 ≈ 52.4；若不保留，維持 evaluator fail-closed 即可，不阻塞 Phase 1
 
@@ -115,16 +115,16 @@
 ### 1c. 候選生成重構 🔴 這是核心
 
 - [x] 🔴 **lexical、semantic、sparse graph/structure 三路各自在完整輸入上獨立排名**，不可先被共同候選池截斷
-- [x] 🔴 **候選池多來源聯集**：lexical／semantic sentence encoder／sparse graph 均先對完整輸入評分再取 route quota；以 RRF/provenance 融合後套固定 total candidate budget
+- [x] 🔴 **候選池多來源聯集**：lexical／semantic sentence encoder／sparse graph 均先對完整輸入評分；`route_top_k` 保存 proposals、`min_per_route` 優先保留 route-exclusive evidence，再以 RRF 填 total cap
 - [x] 🔴 position／document／section strata coverage guard 已可獨立設定；輸出明記 `guard:*` reason，且不把它們宣稱為第四個語意 route
 - [x] candidate record 保存 `sentence_id / original_index / document_id / section_id / route raw score / rank / percentile / route agreement / fusion score / inclusion reason / model revision / deterministic cost facts`
-- [x] K 在完整 rank 排序後截取；固定 total budget 依 RRF rank 截取，最後才按原文位置輸出候選
+- [x] K 在完整 rank 排序後截取；RRF 只能從 proposal union 與 explicit guards 填補，不得從全文引入任何 route top-K 外句子；最後才按原文位置輸出候選
 
 ### 1d. 路由與融合層
 
 - [~] semantic route 已要求明確 sentence-encoder checkpoint/revision、一次載入、batch encode，並記錄 `max_model_tokens` 與截斷率；pinned MiniLM 真實 CPU 與 3-row Multi-News smoke 已通過，尚待正式 cold/warm cost pilot
 - [x] graph candidate route 預設為有界 TF-IDF cosine sparse kNN；dense `N×N` 僅能以 `dense_legacy` 明確啟用
-- [x] 候選融合採 reciprocal-rank fusion、rank percentile 與 route agreement，不平均不可比分數
+- [x] 候選融合採 normalized reciprocal-rank fusion、rank percentile 與 route agreement；MVP selector 實際接收 RRF salience，不再只使用 provenance membership
 - [x] candidate route 與已啟用 feature 失敗會使 run fail；不再填 0 或靜默 fallback
 - [~] 已建立 `compute_budget.mode: fixed` 與明確 enabled routes；adaptive allocator 尚未實作，若誤設為 adaptive 會 fail loud
 
@@ -142,7 +142,7 @@
 - [ ] `rougeL` vs `rougeLsum` golden test
 - [ ] **條件式**：若保留 SciTLDR，加入官方 reference aggregation golden test；若刪除該實驗，不列入 Gate 1
 - [x] Graph：diagonal、threshold、dangling node、sparse edge bound
-- [x] 候選 top-K rank、RRF total budget、route provenance 與 document guard 測試
+- [x] 候選 top-K rank、union boundary、route reservation、RRF selector handoff、route provenance 與 document guard 測試
 - [x] canonical schema 與 production prediction 已保存 Multi-News document boundaries／selected sentence provenance；candidate route 與 enabled feature 均 fail loud
 - [~] task-profile matrix 已測 single sentence 不建立 redundancy objective且拒絕 subset NSGA-II；multi-document group coverage 尚未完成
 - [~] NSGA-II 參數傳遞與 **no-fallback** 已測；seed 跨重跑決定性尚待補

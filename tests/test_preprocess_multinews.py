@@ -1,5 +1,8 @@
 """Golden tests for boundary-preserving Multi-News preprocessing."""
 
+import importlib
+import sys
+
 import pytest
 
 from src.data.preprocess_multinews import (
@@ -10,6 +13,14 @@ from src.data.preprocess_multinews import (
     split_source_documents,
 )
 from src.data.schemas import flatten_sentence_texts, validate_document_example
+
+
+def test_preprocessor_module_import_does_not_require_datasets(monkeypatch):
+    module_name = "src.data.preprocess_multinews"
+    monkeypatch.delitem(sys.modules, module_name, raising=False)
+    monkeypatch.setitem(sys.modules, "datasets", None)
+    imported = importlib.import_module(module_name)
+    assert imported.DATASET_ID == "alexfabbri/multi_news"
 
 
 def raw_example():

@@ -15,7 +15,7 @@
 | Stage 2 的 `w_bert` 參數 | 🔴 **命名誤導** —— 它加權的是 TF-IDF 分數，不是 BERT。Stage 2 目前沒有 PLM |
 | ROUGE-L | 🟠 舊碼用單序列 `rougeL`；已改為多句適用的 `rougeLsum`，但與 published Perl ROUGE 的 parity 尚未驗證 |
 | Baseline（Lead / TextRank / LexRank / PacSum） | 🔴 **尚未實作** —— 舊論文表格的 baseline 數字引用自其他論文，不是本 repo 產出 |
-| 三軌候選生成 | 🟠 correctness contract 已完成：各 route 在完整輸入排名、固定總候選 budget、RRF provenance、coverage guard；實際效益仍待 validation pilot |
+| 三軌候選生成 | 🟠 correctness contract 已完成：完整輸入排名、route proposals/reservations、RRF selector salience、total cap 與 coverage guard；實際效益仍待 validation pilot |
 
 **簡言之：程式可以跑，但目前的輸出不能當研究結論。**
 

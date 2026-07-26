@@ -2,8 +2,6 @@ import argparse
 import os
 from typing import Dict
 
-from datasets import load_dataset
-
 from src.data.schemas import build_document_example
 from src.utils.io import ensure_dir, write_jsonl
 
@@ -35,6 +33,13 @@ def main():
     args = ap.parse_args()
 
     print(f"Loading scitldr (AIC) split: {args.split}...")
+    try:
+        from datasets import load_dataset
+    except ImportError as exc:
+        raise RuntimeError(
+            "Downloading SciTLDR requires the optional 'datasets' package. "
+            "Install the full research requirements before running this command."
+        ) from exc
     ds = load_dataset("allenai/scitldr", "AIC", split=args.split, trust_remote_code=True)
     
     out_path = args.out or os.path.join("data", "processed", f"scitldr_{args.split}.jsonl")

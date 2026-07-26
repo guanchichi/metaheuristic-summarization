@@ -256,10 +256,11 @@ CandidateRecord
 ### 5.6 Provenance-aware fusion
 
 - 不直接平均不可比的 raw scores。
-- 第一版以 rank percentile、reciprocal-rank fusion、route agreement 與明確 strata guard 組合。
+- 第一版以 rank percentile、reciprocal-rank fusion、route agreement 與明確 strata guard 組合；normalized fusion 必須實際送入 selector，不可只收藏 provenance 後仍用 lexical score。
 - 每一路先獨立 top-K，再作 union；相同 sentence 合併 provenance，不複製候選。
 - position/document/section strata 是 coverage guard，不是假裝第四個獨立語意模型。
-- 最終 candidate budget 固定，避免多開一路就無限制增加搜尋空間。
+- `route_top_k` 是 proposal depth，`min_per_route` 是 route evidence reservation，`total` 是最終 pool cap；三者不得混稱 quota。
+- route-exclusive reservations 與 coverage guards 先進池，剩餘空位才用 RRF；RRF 僅能在 proposal union 加 guards 內選，不可從全文任意補句。union 小於 cap 時允許 underfill 並記錄原因。
 
 ## 6. Objective factory
 

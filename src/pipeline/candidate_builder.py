@@ -232,7 +232,34 @@ def _coverage_guard_indices(
     return reasons
 
 
-def build_candidate_records(
+def _resolve_min_per_route(
+    value: int | Mapping[str, int],
+    routes: List[str],
+    route_top_k: int,
+) -> Dict[str, int]:
+    if isinstance(value, Mapping):
+        resolved = {route: 0 for route in routes}
+        for raw_route, raw_minimum in value.items():
+            route = _canonical_route_name(str(raw_route))
+            if route not in resolved:
+                raise ValueError(
+                    f"minimum reservation configured for disabled route {raw_route!r}"
+                )
+            resolved[route] = int(raw_minimum)
+    else:
+        resolved = {route: int(value) for route in routes}
+    for route, minimum in resolved.items():
+        if minimum < 0:
+            raise ValueError("min_per_route must be non-negative")
+        if minimum > route_top_k:
+            raise ValueError(
+                f"min_per_route for {route!r} ({minimum}) exceeds "
+                f"route_top_k ({route_top_k})"
+            )
+    return resolved
+
+
+def build_candidate_pool(
     sentence_records: List[Dict],
     base_scores: List[float],
     k: int,
@@ -241,20 +268,34 @@ def build_candidate_records(
     threshold: float = 0.0,
     *,
     total_budget: Optional[int] = None,
+    min_per_route: int | Mapping[str, int] = 0,
     route_config: Optional[Mapping[str, Mapping[str, Any]]] = None,
     coverage_guard: Optional[Mapping[str, Any]] = None,
     rrf_constant: int = 60,
-) -> List[Dict]:
-    """Score full input, fuse route provenance, and enforce one total budget.
+) -> Dict[str, Any]:
+    """Build route proposals, reservations, guards, and one capped final pool.
 
-    ``k`` is the per-route quota. ``total_budget`` is the final number of
-    candidates passed to the selector. When a total budget is supplied the
-    pool is deterministically filled (or capped) to ``min(total_budget, N)``.
+    ``k`` is the proposal depth (``route_top_k``), not a guarantee that every
+    proposal survives the final cap. ``min_per_route`` is the explicit route
+    reservation. RRF may fill remaining slots only from the proposal union or
+    explicit coverage guards; sentences outside that universe cannot enter.
     """
 
     n = len(sentence_records)
     if n == 0:
-        return []
+        return {
+            "records": [],
+            "route_proposals": {},
+            "allocation": {
+                "route_top_k": 0,
+                "min_per_route": {},
+                "total_cap": total_budget,
+                "proposal_union_size": 0,
+                "candidate_universe_size": 0,
+                "actual_size": 0,
+                "underfilled_by": int(total_budget or 0),
+            },
+        }
     if len(base_scores) != n:
         raise ValueError("base_scores length must match sentence_records")
     if isinstance(sources, (str, bytes)) or not sources:
@@ -298,12 +339,19 @@ def build_candidate_records(
 
     route_rankings: Dict[str, List[int]] = {}
     route_ranks: Dict[str, Dict[int, int]] = {}
+    route_proposal_sets: Dict[str, Set[int]] = {}
     union_indices: Set[int] = set()
     for route, values in route_values.items():
         ranking, ranks = _rank(values)
         route_rankings[route] = ranking
         route_ranks[route] = ranks
-        union_indices.update(ranking[:quota])
+        proposals = set(ranking[:quota])
+        route_proposal_sets[route] = proposals
+        union_indices.update(proposals)
+
+    route_minimums = _resolve_min_per_route(
+        min_per_route, list(route_values), quota
+    )
 
     fusion_scores = {
         index: sum(
@@ -314,6 +362,16 @@ def build_candidate_records(
     }
     fused_order = sorted(range(n), key=lambda i: (-fusion_scores[i], i))
     fused_ranks = {index: rank for rank, index in enumerate(fused_order, start=1)}
+    fusion_min = min(fusion_scores.values())
+    fusion_max = max(fusion_scores.values())
+    fusion_normalized = {
+        index: (
+            1.0
+            if fusion_max == fusion_min
+            else (fusion_scores[index] - fusion_min) / (fusion_max - fusion_min)
+        )
+        for index in range(n)
+    }
     guard_reasons = _coverage_guard_indices(
         sentence_records, fused_ranks, coverage_guard or {}
     )
@@ -329,21 +387,48 @@ def build_candidate_records(
     for index, reasons in guard_reasons.items():
         inclusion_reasons.setdefault(index, []).extend(reasons)
 
-    if total_budget is None:
-        selected_indices = set(inclusion_reasons)
-    else:
-        # Guards are reserved first, but are themselves ranked by the same
-        # inference-only fused evidence when there are more guards than slots.
-        guarded = sorted(guard_reasons, key=lambda i: (fused_ranks[i], i))
-        chosen = guarded[:total_budget]
+    # Reserve route-specific evidence before consensus fill. Exclusive
+    # proposals are preferred so the mechanism does not erase the unique
+    # contribution it is intended to measure.
+    proposal_memberships = {
+        index: sum(index in proposals for proposals in route_proposal_sets.values())
+        for index in union_indices
+    }
+    reserved_by_route: Dict[str, List[int]] = {}
+    for route, ranking in route_rankings.items():
+        proposal_order = [index for index in ranking if index in route_proposal_sets[route]]
+        exclusive = [
+            index for index in proposal_order if proposal_memberships[index] == 1
+        ]
+        shared = [index for index in proposal_order if proposal_memberships[index] > 1]
+        reserved = (exclusive + shared)[: route_minimums[route]]
+        reserved_by_route[route] = reserved
+        for index in reserved:
+            inclusion_reasons.setdefault(index, []).append(f"reserve:{route}")
+
+    candidate_universe = set(union_indices) | set(guard_reasons)
+    mandatory = set(guard_reasons)
+    for reserved in reserved_by_route.values():
+        mandatory.update(reserved)
+
+    effective_cap = total_budget
+    if effective_cap is not None:
+        if len(mandatory) > effective_cap:
+            raise ValueError(
+                f"candidate total cap {effective_cap} cannot fit "
+                f"{len(mandatory)} mandatory route/guard reservations"
+            )
+        chosen = set(mandatory)
         for index in fused_order:
-            if len(chosen) >= total_budget:
+            if len(chosen) >= effective_cap:
                 break
-            if index in chosen:
+            if index not in candidate_universe or index in chosen:
                 continue
-            chosen.append(index)
-            inclusion_reasons.setdefault(index, []).append("budget_fill")
-        selected_indices = set(chosen)
+            chosen.add(index)
+            inclusion_reasons.setdefault(index, []).append("rrf_fill")
+        selected_indices = chosen
+    else:
+        selected_indices = candidate_universe
 
     candidates = []
     for index in sorted(selected_indices):
@@ -358,6 +443,7 @@ def build_candidate_records(
             "route_scores": {},
             "selected_by_routes": [],
             "fusion_score": fusion_scores[index],
+            "fusion_normalized": fusion_normalized[index],
             "fused_rank": fused_ranks[index],
             "inclusion_reasons": inclusion_reasons.get(index, []),
         }
@@ -383,7 +469,82 @@ def build_candidate_records(
         candidate["route_agreement"] = len(candidate["selected_by_routes"])
         validate_candidate_record(candidate)
         candidates.append(candidate)
-    return candidates
+
+    route_proposals = {
+        route: [
+            {
+                "sentence_id": sentence_records[index]["sentence_id"],
+                "original_index": sentence_records[index]["original_index"],
+                "rank": route_ranks[route][index],
+                "raw": route_values[route][index],
+                "selected_in_final_pool": index in selected_indices,
+                "reserved": index in reserved_by_route[route],
+            }
+            for index in route_rankings[route][:quota]
+        ]
+        for route in route_values
+    }
+    dropped_by_route = {
+        route: sum(index not in selected_indices for index in proposals)
+        for route, proposals in route_proposal_sets.items()
+    }
+    reservation_counts = {
+        route: sum(index in selected_indices for index in proposals)
+        for route, proposals in route_proposal_sets.items()
+    }
+    underfilled_by = (
+        max(0, effective_cap - len(selected_indices))
+        if effective_cap is not None
+        else 0
+    )
+    return {
+        "records": candidates,
+        "route_proposals": route_proposals,
+        "allocation": {
+            "route_top_k": quota,
+            "min_per_route": route_minimums,
+            "total_cap": effective_cap,
+            "proposal_union_size": len(union_indices),
+            "coverage_guard_size": len(guard_reasons),
+            "candidate_universe_size": len(candidate_universe),
+            "mandatory_size": len(mandatory),
+            "actual_size": len(candidates),
+            "underfilled_by": underfilled_by,
+            "selected_proposals_by_route": reservation_counts,
+            "dropped_proposals_by_route": dropped_by_route,
+        },
+    }
+
+
+def build_candidate_records(
+    sentence_records: List[Dict],
+    base_scores: List[float],
+    k: int,
+    sources: List[str],
+    sim_matrix=None,
+    threshold: float = 0.0,
+    *,
+    total_budget: Optional[int] = None,
+    min_per_route: int | Mapping[str, int] = 0,
+    route_config: Optional[Mapping[str, Mapping[str, Any]]] = None,
+    coverage_guard: Optional[Mapping[str, Any]] = None,
+    rrf_constant: int = 60,
+) -> List[Dict]:
+    """Backward-compatible record-only view of :func:`build_candidate_pool`."""
+
+    return build_candidate_pool(
+        sentence_records,
+        base_scores,
+        k,
+        sources,
+        sim_matrix=sim_matrix,
+        threshold=threshold,
+        total_budget=total_budget,
+        min_per_route=min_per_route,
+        route_config=route_config,
+        coverage_guard=coverage_guard,
+        rrf_constant=rrf_constant,
+    )["records"]
 
 
 def build_candidate_union(

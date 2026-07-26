@@ -3,7 +3,7 @@
 import pytest
 
 from src.data.schemas import build_document_example, flatten_sentence_records
-from src.pipeline.candidate_builder import build_candidate_records
+from src.pipeline.candidate_builder import build_candidate_pool, build_candidate_records
 
 
 def two_document_records():
@@ -114,6 +114,81 @@ def test_total_budget_uses_fused_rank_not_original_order():
     assert all(candidate["inclusion_reasons"] for candidate in candidates)
 
 
+def test_total_cap_never_admits_sentences_outside_route_union():
+    records = two_document_records()
+    pool = build_candidate_pool(
+        records,
+        base_scores=[0.1, 0.2, 0.3, 0.9],
+        k=1,
+        sources=["lexical", "position"],
+        total_budget=4,
+    )
+    proposal_indices = {
+        proposal["original_index"]
+        for proposals in pool["route_proposals"].values()
+        for proposal in proposals
+    }
+    final_indices = {record["original_index"] for record in pool["records"]}
+    assert final_indices <= proposal_indices
+    assert pool["allocation"]["actual_size"] == len(proposal_indices)
+    assert pool["allocation"]["underfilled_by"] == 4 - len(proposal_indices)
+
+
+def test_route_reservations_protect_unique_proposals_before_rrf_fill():
+    example = build_document_example(
+        example_id="reservation",
+        split="validation",
+        documents=[[f"Sentence number {index}." for index in range(6)]],
+        references=["Reference."],
+        input_mode="single_document",
+        output_mode="multi_sentence",
+    )
+    records = flatten_sentence_records(example)
+    pool = build_candidate_pool(
+        records,
+        base_scores=[0.0, 0.1, 0.2, 0.3, 0.8, 0.9],
+        k=3,
+        sources=["lexical", "position"],
+        min_per_route=2,
+        total_budget=4,
+    )
+    final_indices = {record["original_index"] for record in pool["records"]}
+    assert final_indices == {0, 1, 4, 5}
+    assert pool["allocation"]["selected_proposals_by_route"] == {
+        "lexical": 2,
+        "position_guard": 2,
+    }
+    assert any(
+        "reserve:lexical" in record["inclusion_reasons"]
+        for record in pool["records"]
+    )
+    assert any(
+        "reserve:position_guard" in record["inclusion_reasons"]
+        for record in pool["records"]
+    )
+
+
+def test_impossible_route_reservations_fail_loudly():
+    example = build_document_example(
+        example_id="impossible",
+        split="validation",
+        documents=[["One.", "Two.", "Three.", "Four."]],
+        references=["Reference."],
+        input_mode="single_document",
+        output_mode="multi_sentence",
+    )
+    records = flatten_sentence_records(example)
+    with pytest.raises(ValueError, match="cannot fit"):
+        build_candidate_pool(
+            records,
+            base_scores=[0.1, 0.2, 0.8, 0.9],
+            k=2,
+            sources=["lexical", "position"],
+            min_per_route=2,
+            total_budget=3,
+        )
+
+
 def test_document_guard_reserves_one_candidate_per_document():
     records = two_document_records()
     candidates = build_candidate_records(
@@ -177,6 +252,7 @@ def test_semantic_route_scores_full_input_and_records_model_metadata(monkeypatch
     assert score["model_revision"] == "fake-commit"
     assert score["estimated_cost"]["encoded_sentences"] == 4
     assert score["metadata"]["truncation_rate"] == pytest.approx(0.25)
+    assert 0.0 <= candidates[0]["fusion_normalized"] <= 1.0
 
 
 def test_semantic_route_requires_explicit_checkpoint():

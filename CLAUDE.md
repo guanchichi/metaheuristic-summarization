@@ -93,7 +93,7 @@ greedy reference 不是 official oracle、未做 paired test。新 validation pi
 
 ### 已套用 patch；合併前仍需測試
 
-以下 patch 的方向正確。`pytest` 已加入 `requirements.txt`，`tests/` 目前 103 項全過；
+以下 patch 的方向正確。`pytest` 已加入 `requirements.txt`，`tests/` 目前 108 項全過；
 SciTLDR 官方 conformance 尚未通過；它只在決定保留 optional stress test 時才是必要驗收，不阻塞 GovReport + Multi-News 主線：
 
 | 檔案 | 修正 |
@@ -103,6 +103,8 @@ SciTLDR 官方 conformance 尚未通過；它只在決定保留 optional stress 
 | `src/models/extractive/encoder_rank.py` | 完整輸入 batch encode、模型快取、pinned revision、截斷率與 deterministic cost facts；CPU 與 3-row pipeline smoke 已過，正式 cold/warm/GPU cost pilot 待做 |
 | `src/pipeline/optimizer_dispatch.py` | `pop_size`/`n_gen`/`seed` 接線；**移除靜默 fallback** |
 | `src/objectives/factory.py` | single-sentence 關閉 subset search；canonical multi-sentence 禁止 raw-sum salience；group coverage 與 selector isolation 尚待完成 |
+| `src/pipeline/candidate_builder.py` | `route_top_k` 只定義 proposals、`min_per_route` 保留 route-specific evidence、RRF 只在 union/guard 內填 total cap；輸出完整 proposal/allocation artifact |
+| `src/pipeline/select_sentences.py` | MVP selector 明確使用 normalized RRF salience；membership-only 只作可消融對照，不再把 semantic provenance 收集後丟棄 |
 | `src/eval/oracle.py` | 新增 greedy oracle reference；不是 exact upper bound。SciTLDR official oracle 僅在保留 optional stress test 時實作／重現 |
 
 - 🚫 **絕對不要再加 `except Exception: fallback to greedy`**。研究模式必須 fail loud

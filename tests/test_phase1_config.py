@@ -15,8 +15,14 @@ def test_phase1_mvp_config_keeps_budgets_and_routes_explicit():
         "mode": "fixed",
         "enabled_routes": ["lexical", "semantic"],
     }
-    assert cfg["candidate_budget"]["per_route"] > 0
-    assert cfg["candidate_budget"]["total"] >= cfg["candidate_budget"]["per_route"]
+    assert cfg["candidate_budget"]["route_top_k"] > 0
+    assert 0 < cfg["candidate_budget"]["min_per_route"] <= cfg[
+        "candidate_budget"
+    ]["route_top_k"]
+    assert cfg["candidate_budget"]["total"] >= 2 * cfg["candidate_budget"][
+        "min_per_route"
+    ]
+    assert cfg["selector"]["salience_source"] == "rrf_fusion"
     assert cfg["length_control"]["max_words"] > 0
     assert cfg["routes"]["semantic"]["revision"] != "main"
     assert len(cfg["routes"]["semantic"]["revision"]) == 40

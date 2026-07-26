@@ -22,10 +22,10 @@ from src.utils.io import (
 )
 from src.representations.sent_vectors import SentenceVectors
 from src.representations.similarity import cosine_similarity_matrix
-from src.data.schemas import flatten_sentence_records
+from src.data.schemas import flatten_sentence_records, validate_candidate_record
 
 from src.pipeline.feature_builder import build_base_scores
-from src.pipeline.candidate_builder import build_candidate_records
+from src.pipeline.candidate_builder import build_candidate_pool
 from src.pipeline.optimizer_dispatch import dispatch_optimizer
 from src.objectives.factory import build_objective_spec, validate_selector_for_task
 
@@ -42,6 +42,37 @@ def validate_requested_split(doc: Dict, requested_split: str) -> None:
             f"canonical row {doc.get('id')!r} belongs to split {doc.get('split')!r}, "
             f"but --split is {requested_split!r}"
         )
+
+
+def attach_selector_salience(
+    candidate_records: List[Dict],
+    base_scores: List[float],
+    source: str,
+) -> List[float]:
+    """Resolve the exact auditable score passed from candidates to selector."""
+
+    normalized_source = (source or "base_score").strip().lower()
+    selector_scores: List[float] = []
+    for candidate in candidate_records:
+        index = candidate["original_index"]
+        if normalized_source in {"base_score", "membership_only"}:
+            value = float(base_scores[index])
+        elif normalized_source == "rrf_fusion":
+            value = float(candidate["fusion_normalized"])
+        elif normalized_source.endswith("_percentile"):
+            route = normalized_source[: -len("_percentile")]
+            if route not in candidate["route_scores"]:
+                raise ValueError(
+                    f"selector salience source {source!r} requires route {route!r}"
+                )
+            value = float(candidate["route_scores"][route]["percentile"])
+        else:
+            raise ValueError(f"unknown selector.salience_source: {source!r}")
+        candidate["selector_salience"] = value
+        candidate["selector_salience_source"] = normalized_source
+        validate_candidate_record(candidate)
+        selector_scores.append(value)
+    return selector_scores
 
 
 def summarize_one(doc: Dict, cfg: Dict) -> Dict:
@@ -98,20 +129,25 @@ def summarize_one(doc: Dict, cfg: Dict) -> Dict:
     # deliberately separate from the output-length budget above.
     budget_cfg = cfg.get("candidate_budget", {})
     if isinstance(budget_cfg, dict):
-        per_route_budget = budget_cfg.get("per_route", cand_cfg.get("k"))
+        route_top_k_budget = budget_cfg.get(
+            "route_top_k", budget_cfg.get("per_route", cand_cfg.get("k"))
+        )
+        min_per_route = budget_cfg.get("min_per_route", 0)
         total_candidate_budget = budget_cfg.get(
             "total", cand_cfg.get("total_budget")
         )
     elif budget_cfg in (None, {}):
-        per_route_budget = cand_cfg.get("k")
+        route_top_k_budget = cand_cfg.get("k")
+        min_per_route = 0
         total_candidate_budget = cand_cfg.get("total_budget")
     else:
-        per_route_budget = cand_cfg.get("k")
+        route_top_k_budget = cand_cfg.get("k")
+        min_per_route = 0
         total_candidate_budget = budget_cfg
     k = int(
         min(15, len(sentences))
-        if per_route_budget is None
-        else per_route_budget
+        if route_top_k_budget is None
+        else route_top_k_budget
     )
     total_candidate_budget = (
         int(total_candidate_budget) if total_candidate_budget is not None else None
@@ -133,8 +169,8 @@ def summarize_one(doc: Dict, cfg: Dict) -> Dict:
     soft_boost = float(cand_cfg.get("soft_boost", 1.05))
 
     g_thresh = float(cfg.get("graph_params", {}).get("threshold", 0.0))
-    candidate_records = (
-        build_candidate_records(
+    candidate_pool_result = (
+        build_candidate_pool(
             sentence_records,
             base_scores,
             k,
@@ -142,22 +178,36 @@ def summarize_one(doc: Dict, cfg: Dict) -> Dict:
             sim_matrix=sim,
             threshold=g_thresh,
             total_budget=total_candidate_budget,
+            min_per_route=min_per_route,
             route_config=cfg.get("routes", {}) or {},
             coverage_guard=cfg.get("coverage_guard", {}) or {},
             rrf_constant=int(cand_cfg.get("rrf_constant", 60)),
         )
         if use_cand
-        else []
+        else {
+            "records": [],
+            "route_proposals": {},
+            "allocation": {"actual_size": 0},
+        }
     )
+    candidate_records = candidate_pool_result["records"]
     cand_idx = [record["original_index"] for record in candidate_records]
+    selector_cfg = cfg.get("selector", {}) or {}
+    salience_source = str(selector_cfg.get("salience_source", "base_score"))
 
     # 5. Apply candidate mode
     if use_cand and cand_idx:
         if mode == "hard":
             sub_sentences = [sentences[i] for i in cand_idx]
-            sub_scores = [base_scores[i] for i in cand_idx]
+            sub_scores = attach_selector_salience(
+                candidate_records, base_scores, salience_source
+            )
             sub_sim = sim[np.ix_(cand_idx, cand_idx)] if sim is not None else None
         else:
+            if salience_source.lower() not in {"base_score", "membership_only"}:
+                raise ValueError(
+                    "provenance-aware selector salience requires candidates.mode='hard'"
+                )
             sub_sentences = sentences
             sub_scores = base_scores[:]
             for i in cand_idx:
@@ -192,10 +242,31 @@ def summarize_one(doc: Dict, cfg: Dict) -> Dict:
     selected.sort()
     summary_sentences = [sentences[i] for i in selected]
     summary = "\n".join(summary_sentences)
+    candidate_by_index = {
+        candidate["original_index"]: candidate for candidate in candidate_records
+    }
     selected_sentences = [
         {
             **sentence_records[index],
             "selection_order": order,
+            "selection_evidence": (
+                {
+                    "selector_salience": candidate_by_index[index].get(
+                        "selector_salience"
+                    ),
+                    "selector_salience_source": candidate_by_index[index].get(
+                        "selector_salience_source"
+                    ),
+                    "fusion_score": candidate_by_index[index]["fusion_score"],
+                    "fusion_normalized": candidate_by_index[index][
+                        "fusion_normalized"
+                    ],
+                    "fused_rank": candidate_by_index[index]["fused_rank"],
+                    "route_agreement": candidate_by_index[index]["route_agreement"],
+                }
+                if index in candidate_by_index
+                else None
+            ),
         }
         for order, index in enumerate(selected)
     ]
@@ -209,10 +280,14 @@ def summarize_one(doc: Dict, cfg: Dict) -> Dict:
         "candidate_pool": {
             "enabled": use_cand,
             "configured_sources": list(sources) if use_cand else [],
-            "per_route_quota": k if use_cand else None,
-            "total_budget": total_candidate_budget if use_cand else None,
+            "route_top_k": k if use_cand else None,
+            "min_per_route": min_per_route if use_cand else None,
+            "total_cap": total_candidate_budget if use_cand else None,
             "actual_size": len(candidate_records),
             "coverage_guard": dict(cfg.get("coverage_guard", {}) or {}),
+            "selector_salience_source": salience_source,
+            "route_proposals": candidate_pool_result["route_proposals"],
+            "allocation": candidate_pool_result["allocation"],
         },
         "objective_spec": objective_spec,
         "output_budget": {

@@ -110,10 +110,15 @@ class TestCandidateBudgetContract:
             "mode": "hard",
             "sources": ["score"],
         }
-        base_config["candidate_budget"] = {"per_route": 4, "total": 2}
+        base_config["candidate_budget"] = {
+            "route_top_k": 4,
+            "min_per_route": 1,
+            "total": 2,
+        }
         result = summarize_one(sample_doc, base_config)
-        assert result["candidate_pool"]["per_route_quota"] == 4
-        assert result["candidate_pool"]["total_budget"] == 2
+        assert result["candidate_pool"]["route_top_k"] == 4
+        assert result["candidate_pool"]["min_per_route"] == 1
+        assert result["candidate_pool"]["total_cap"] == 2
         assert result["candidate_pool"]["actual_size"] == 2
 
     def test_fixed_compute_budget_controls_enabled_routes(
@@ -128,9 +133,76 @@ class TestCandidateBudgetContract:
             "mode": "fixed",
             "enabled_routes": ["lexical"],
         }
-        base_config["candidate_budget"] = {"per_route": 2, "total": 2}
+        base_config["candidate_budget"] = {"route_top_k": 2, "total": 2}
         result = summarize_one(sample_doc, base_config)
         assert result["candidate_pool"]["configured_sources"] == ["lexical"]
+
+    def test_rrf_provenance_is_the_score_received_by_selector(
+        self, sample_doc, base_config, monkeypatch
+    ):
+        captured = {}
+
+        def fake_encoder_route_scores(sentences, **kwargs):
+            return [0.1, 0.2, 0.3, 0.8, 0.9], {
+                "model_name": kwargs["model_name"],
+                "model_revision": "fake-semantic-revision",
+                "max_model_tokens": kwargs["max_model_tokens"],
+                "effective_max_model_tokens": kwargs["max_model_tokens"],
+                "batch_size": kwargs["batch_size"],
+                "estimated_cost": {
+                    "encoded_sentences": len(sentences),
+                    "input_tokens_before_truncation": 25,
+                },
+                "truncated_sentences": 0,
+                "truncation_rate": 0.0,
+            }
+
+        def fake_dispatch(*args, **kwargs):
+            captured["scores"] = list(args[2])
+            return [0]
+
+        monkeypatch.setattr(
+            "src.pipeline.select_sentences.dispatch_optimizer", fake_dispatch
+        )
+        monkeypatch.setattr(
+            "src.pipeline.candidate_builder.encoder_route_scores",
+            fake_encoder_route_scores,
+        )
+        base_config["candidates"] = {
+            "use": True,
+            "mode": "hard",
+            "sources": ["lexical", "semantic"],
+        }
+        base_config["candidate_budget"] = {
+            "route_top_k": 3,
+            "min_per_route": 1,
+            "total": 4,
+        }
+        base_config["routes"] = {
+            "semantic": {
+                "model_name": "sentence-transformers/fake",
+                "max_model_tokens": 64,
+            }
+        }
+        base_config["selector"] = {"salience_source": "rrf_fusion"}
+        result = summarize_one(sample_doc, base_config)
+        expected = [
+            candidate["fusion_normalized"]
+            for candidate in result["candidate_records"]
+        ]
+        lexical = [
+            candidate["route_scores"]["lexical"]["raw"]
+            for candidate in result["candidate_records"]
+        ]
+        assert captured["scores"] == pytest.approx(expected)
+        assert captured["scores"] != pytest.approx(lexical)
+        assert all(
+            candidate["selector_salience_source"] == "rrf_fusion"
+            for candidate in result["candidate_records"]
+        )
+        assert result["selected_sentences"][0]["selection_evidence"][
+            "selector_salience_source"
+        ] == "rrf_fusion"
 
     def test_unimplemented_adaptive_router_fails_loudly(
         self, sample_doc, base_config

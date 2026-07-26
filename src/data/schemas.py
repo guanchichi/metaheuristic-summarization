@@ -367,6 +367,11 @@ def validate_candidate_record(record: Mapping[str, Any]) -> None:
         float(fusion_score)
     ):
         raise SchemaValidationError("candidate.fusion_score must be finite")
+    fusion_normalized = record.get("fusion_normalized")
+    if not isinstance(fusion_normalized, (int, float)) or not 0.0 <= float(
+        fusion_normalized
+    ) <= 1.0:
+        raise SchemaValidationError("candidate.fusion_normalized must be in [0, 1]")
     if not isinstance(record.get("fused_rank"), int) or record["fused_rank"] < 1:
         raise SchemaValidationError("candidate.fused_rank must be positive")
     reasons = record.get("inclusion_reasons")
@@ -375,6 +380,16 @@ def validate_candidate_record(record: Mapping[str, Any]) -> None:
     ):
         raise SchemaValidationError(
             "candidate.inclusion_reasons must be a non-empty list of strings"
+        )
+    if "selector_salience" in record or "selector_salience_source" in record:
+        selector_salience = record.get("selector_salience")
+        if not isinstance(selector_salience, (int, float)) or not math.isfinite(
+            float(selector_salience)
+        ):
+            raise SchemaValidationError("candidate.selector_salience must be finite")
+        _nonempty_string(
+            record.get("selector_salience_source"),
+            "candidate.selector_salience_source",
         )
 
 

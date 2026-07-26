@@ -9,7 +9,6 @@ import re
 import unicodedata
 from typing import Any, Dict, List, Mapping, Sequence, Tuple
 
-from datasets import load_dataset
 from nltk.tokenize import PunktSentenceTokenizer
 from nltk.tokenize.punkt import PunktParameters
 from tqdm import tqdm
@@ -257,6 +256,13 @@ def main() -> None:
         args.data_dir,
         args.split,
     )
+    try:
+        from datasets import load_dataset
+    except ImportError as exc:
+        raise RuntimeError(
+            "Downloading Multi-News requires the optional 'datasets' package. "
+            "Install the full research requirements before running this command."
+        ) from exc
     dataset = load_dataset(
         "parquet",
         data_files={args.split: data_files},

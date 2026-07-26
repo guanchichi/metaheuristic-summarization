@@ -536,9 +536,9 @@ Document record：
 
 實作狀態（2026-07-26）：已建立 canonical schema 與 pinned Multi-News preprocessor，保存 source order、raw document/sentence hash、字元 span 與 cleaned-to-original mapping；完整 train/validation/test artifact 與 health manifest 尚待生成，因此舊 flat JSONL 仍不可用於正式結果。
 
-同日已將 provenance 接入 production selector：candidate artifact 保存各 route 的 raw score、完整 rank、percentile、top-K membership、route agreement、RRF fusion、inclusion reason、model revision、截斷統計與 deterministic cost facts；prediction 保存 ordered summary sentences 及其原始 document/section/sentence ID。正式 semantic route 現已在完整輸入上 batch encode 後排名，graph route 預設改為有界 sparse TF-IDF kNN。這些是 correctness contract 已完成，不代表 route utility 已被實驗證實；正式 cost pilot、unique recall 與 quality ablation 仍是 freeze 前必要條件。
+同日已將 provenance 接入 production selector：candidate artifact 保存各 route 的 raw score、完整 rank、percentile、top-K proposals、route agreement、normalized RRF fusion、reservation/inclusion reason、model revision、截斷統計與 deterministic cost facts；MVP selector 實際使用 normalized RRF salience，prediction 亦保存每個 selected sentence 的 selection evidence。正式 semantic route 現已在完整輸入上 batch encode 後排名，graph route 預設改為有界 sparse TF-IDF kNN。`route_top_k`、`min_per_route` 與 total cap 分開；route-exclusive evidence/guards 優先保留，RRF 不得從 proposal union/guards 外補句。這些是 correctness contract 已完成，不代表 route utility 已被實驗證實；正式 cost pilot、unique recall 與 quality ablation 仍是 freeze 前必要條件。
 
-2026-07-26 correctness smoke：pinned `all-MiniLM-L6-v2@c9745ed...` 已在 CPU 直接 encode 並正確回報刻意截斷；其後以 canonical Multi-News validation 3-row debug subset 端到端處理 399 句，三列各固定 60 candidates、保存 lexical/semantic provenance 與同一 resolved revision，256 model-token 設定下截斷率皆為 0。此 run 只證明 wiring/artifact contract，不是 validation quality pilot；3-row ROUGE 不得寫入論文結果。
+2026-07-26 correctness smoke：pinned `all-MiniLM-L6-v2@c9745ed...` 已在 CPU 直接 encode 並正確回報刻意截斷；其後以 canonical Multi-News validation 3-row debug subset 端到端處理 399 句。修正 membership-only 缺陷後，三列 final pool 為 55／60／60（第一列 proposal union 僅 55，誠實 underfill 5），union/guard 外候選為 0，selector salience 與 normalized RRF mismatch 為 0，且三列選句都相對舊 smoke 改變。此 run 只證明 wiring/artifact contract，不是 validation quality pilot；3-row ROUGE 不得寫入論文結果。
 
 Candidate record：
 
