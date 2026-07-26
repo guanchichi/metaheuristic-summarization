@@ -1,63 +1,66 @@
-from typing import List, Optional
+"""Sentence-encoder ranking used by both candidate routing and selection."""
+
+import os
+from typing import Any, Dict, List, Optional, Tuple
 
 from src.utils.tokenizer import count_tokens
 
 
-def _ensure_imports():
+def _ensure_imports() -> None:
     try:
         import torch  # noqa: F401
-        from transformers import AutoTokenizer, AutoModel, AutoConfig  # noqa: F401
-    except Exception as e:
+        from transformers import AutoConfig, AutoModel, AutoTokenizer  # noqa: F401
+    except Exception as exc:
         raise RuntimeError(
-            "需要安裝 transformers 與 torch 才能使用編碼器排序"
-        ) from e
+            "Encoder ranking requires the optional 'torch' and 'transformers' packages."
+        ) from exc
 
 
 _MODEL_CACHE: dict = {}
 
 
 def load_encoder(
-    model_name: str = "bert-base-uncased",
+    model_name: str,
     device: Optional[str] = None,
     token: Optional[str] = None,
+    revision: Optional[str] = None,
 ):
-    """Load (and cache) a tokenizer+model pair.
+    """Load and cache one tokenizer/model pair for the full run.
 
-    AUDIT FIX (2026-07): this construction used to happen inside
-    ``_sentence_embeddings``, i.e. once PER DOCUMENT.  An exploratory CPU
-    timing suggested that loading dominated the old per-article measurement,
-    but the original timing script was not versioned.  The 78% loading share
-    and 1.04x inference-only ratio therefore remain diagnostics that must be
-    reproduced under the locked runtime protocol before publication.
-
-    Timing reported in the paper must therefore separate ONE-OFF model
-    loading from PER-DOCUMENT inference.  Use ``clear_encoder_cache()`` and
-    an explicit warm-up when benchmarking.
+    Publication timing must report one-off loading separately from warm
+    per-document inference. Use :func:`clear_encoder_cache` between cold-load
+    benchmark configurations.
     """
+
+    _ensure_imports()
     import torch
-    from transformers import AutoTokenizer, AutoModel, AutoConfig
+    from transformers import AutoConfig, AutoModel, AutoTokenizer
 
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
-    key = (model_name, device)
+    key = (model_name, revision, device)
     if key in _MODEL_CACHE:
         return _MODEL_CACHE[key]
 
-    use_fast = not (isinstance(model_name, str) and "xlnet" in model_name.lower())
-    tokenizer = AutoTokenizer.from_pretrained(model_name, token=token, use_fast=use_fast)
+    use_fast = "xlnet" not in model_name.lower()
+    common_kwargs: Dict[str, Any] = {"token": token}
+    if revision is not None:
+        common_kwargs["revision"] = revision
+    tokenizer = AutoTokenizer.from_pretrained(
+        model_name, use_fast=use_fast, **common_kwargs
+    )
 
-    if isinstance(model_name, str) and ("roberta" in model_name.lower()):
+    if "roberta" in model_name.lower():
         try:
-            cfg = AutoConfig.from_pretrained(model_name)
-            try:
-                cfg.add_pooling_layer = False  # type: ignore[attr-defined]
-            except Exception:
-                pass
-            model = AutoModel.from_pretrained(model_name, token=token, config=cfg)
-        except Exception:
-            model = AutoModel.from_pretrained(model_name, token=token)
+            config = AutoConfig.from_pretrained(model_name, **common_kwargs)
+            config.add_pooling_layer = False  # type: ignore[attr-defined]
+            model = AutoModel.from_pretrained(
+                model_name, config=config, **common_kwargs
+            )
+        except (AttributeError, TypeError, ValueError):
+            model = AutoModel.from_pretrained(model_name, **common_kwargs)
     else:
-        model = AutoModel.from_pretrained(model_name, token=token)
+        model = AutoModel.from_pretrained(model_name, **common_kwargs)
 
     model.eval()
     model.to(device)
@@ -66,56 +69,159 @@ def load_encoder(
 
 
 def clear_encoder_cache() -> None:
-    """Drop cached encoders (use between benchmark configurations)."""
+    """Drop cached encoders (for cold-load benchmarks and isolated tests)."""
+
     _MODEL_CACHE.clear()
+
+
+def _effective_max_tokens(tokenizer, requested: int) -> int:
+    if requested < 2:
+        raise ValueError("max_model_tokens must be at least 2")
+    model_limit = getattr(tokenizer, "model_max_length", requested)
+    if not isinstance(model_limit, int) or model_limit <= 0 or model_limit > 1_000_000:
+        model_limit = requested
+    return min(requested, model_limit)
 
 
 def _sentence_embeddings(
     sentences: List[str],
-    model_name: str = "bert-base-uncased",
+    model_name: str,
     device: Optional[str] = None,
     token: Optional[str] = None,
-):
+    revision: Optional[str] = None,
+    batch_size: int = 16,
+    max_model_tokens: int = 256,
+) -> Tuple[Any, Dict[str, Any]]:
+    """Batch-encode all sentences and return embeddings plus truncation facts."""
+
+    if batch_size < 1:
+        raise ValueError("batch_size must be positive")
     import torch
 
-    tokenizer, model, device = load_encoder(model_name, device=device, token=token)
+    tokenizer, model, resolved_device = load_encoder(
+        model_name, device=device, token=token, revision=revision
+    )
+    effective_max = _effective_max_tokens(tokenizer, max_model_tokens)
 
-    embs: List[torch.Tensor] = []
-    batch_size = 16
-    for i in range(0, len(sentences), batch_size):
-        batch = sentences[i : i + batch_size]
-        enc = tokenizer(
+    embeddings: List[torch.Tensor] = []
+    input_tokens = 0
+    truncated_sentences = 0
+    for start in range(0, len(sentences), batch_size):
+        batch = sentences[start : start + batch_size]
+        untruncated = tokenizer(
+            batch,
+            add_special_tokens=True,
+            padding=False,
+            truncation=False,
+        )
+        token_rows = untruncated["input_ids"]
+        lengths = [len(row) for row in token_rows]
+        input_tokens += sum(lengths)
+        truncated_sentences += sum(length > effective_max for length in lengths)
+
+        encoded = tokenizer(
             batch,
             padding=True,
             truncation=True,
-            max_length=256,
+            max_length=effective_max,
             return_tensors="pt",
         )
-        enc = {k: v.to(device) for k, v in enc.items()}
-        with torch.no_grad():
-            out = model(**enc)
-            last = out.last_hidden_state  # [B, T, H]
-            mask = enc["attention_mask"].unsqueeze(-1)  # [B, T, 1]
-            masked = last * mask
-            sum_vec = masked.sum(dim=1)
-            lengths = mask.sum(dim=1).clamp(min=1)
-            sent_emb = sum_vec / lengths  # mean pooling
-            embs.append(sent_emb.detach().cpu())
-    import torch as _torch
+        encoded = {key: value.to(resolved_device) for key, value in encoded.items()}
+        with torch.inference_mode():
+            output = model(**encoded)
+            last_hidden = output.last_hidden_state
+            attention = encoded["attention_mask"].unsqueeze(-1)
+            summed = (last_hidden * attention).sum(dim=1)
+            denominator = attention.sum(dim=1).clamp(min=1)
+            embeddings.append((summed / denominator).detach().cpu())
 
-    return _torch.cat(embs, dim=0)  # [N, H]
+    if not embeddings:
+        return torch.empty((0, 0)), {
+            "model_name": model_name,
+            "model_revision": revision or model_name,
+            "max_model_tokens": max_model_tokens,
+            "effective_max_model_tokens": effective_max,
+            "batch_size": batch_size,
+            "estimated_cost": {
+                "encoded_sentences": 0,
+                "input_tokens_before_truncation": 0,
+            },
+            "truncated_sentences": 0,
+            "truncation_rate": 0.0,
+            "device": str(resolved_device),
+        }
+
+    config = getattr(model, "config", None)
+    resolved_revision = (
+        getattr(config, "_commit_hash", None)
+        or revision
+        or getattr(config, "name_or_path", None)
+        or model_name
+    )
+    metadata = {
+        "model_name": model_name,
+        "model_revision": str(resolved_revision),
+        "max_model_tokens": max_model_tokens,
+        "effective_max_model_tokens": effective_max,
+        "batch_size": batch_size,
+        "estimated_cost": {
+            "encoded_sentences": len(sentences),
+            "input_tokens_before_truncation": input_tokens,
+        },
+        "truncated_sentences": truncated_sentences,
+        "truncation_rate": truncated_sentences / len(sentences),
+        "device": str(resolved_device),
+    }
+    return torch.cat(embeddings, dim=0), metadata
 
 
-def _cosine_scores_to_centroid(embs) -> List[float]:
-    import torch
-
-    if embs.size(0) == 0:
+def _cosine_scores_to_centroid(embeddings) -> List[float]:
+    if embeddings.size(0) == 0:
         return []
-    centroid = embs.mean(dim=0, keepdim=True)  # [1, H]
-    a = embs / (embs.norm(dim=1, keepdim=True) + 1e-12)
-    b = centroid / (centroid.norm(dim=1, keepdim=True) + 1e-12)
-    sims = (a * b).sum(dim=1)
-    return sims.tolist()
+    centroid = embeddings.mean(dim=0, keepdim=True)
+    normalized = embeddings / (embeddings.norm(dim=1, keepdim=True) + 1e-12)
+    normalized_centroid = centroid / (centroid.norm(dim=1, keepdim=True) + 1e-12)
+    return (normalized * normalized_centroid).sum(dim=1).tolist()
+
+
+def encoder_route_scores(
+    sentences: List[str],
+    *,
+    model_name: str,
+    device: Optional[str] = None,
+    batch_size: int = 16,
+    max_model_tokens: int = 256,
+    revision: Optional[str] = None,
+) -> Tuple[List[float], Dict[str, Any]]:
+    """Score every input sentence before any candidate top-K is applied."""
+
+    if not sentences:
+        return [], {
+            "model_name": model_name,
+            "model_revision": revision or model_name,
+            "max_model_tokens": max_model_tokens,
+            "effective_max_model_tokens": max_model_tokens,
+            "batch_size": batch_size,
+            "estimated_cost": {
+                "encoded_sentences": 0,
+                "input_tokens_before_truncation": 0,
+            },
+            "truncated_sentences": 0,
+            "truncation_rate": 0.0,
+        }
+
+    _ensure_imports()
+    token = os.environ.get("HUGGINGFACE_TOKEN") or os.environ.get("HF_TOKEN")
+    embeddings, metadata = _sentence_embeddings(
+        sentences,
+        model_name=model_name,
+        device=device,
+        token=token,
+        revision=revision,
+        batch_size=batch_size,
+        max_model_tokens=max_model_tokens,
+    )
+    return _cosine_scores_to_centroid(embeddings), metadata
 
 
 def encoder_select(
@@ -125,39 +231,42 @@ def encoder_select(
     max_sentences: Optional[int] = 3,
     model_name: str = "bert-base-uncased",
     device: Optional[str] = None,
+    batch_size: int = 16,
+    max_model_tokens: int = 256,
+    revision: Optional[str] = None,
 ) -> List[int]:
-    """通用編碼器排序：句向量（均值池化）→ 重心 cosine 排序 → 取前 N。
-    不使用 greedy/GRASP/NSGA-II，直接依 `unit`（sentences/tokens）取上限。
-    """
+    """Rank sentences by encoder-centroid similarity under an output budget."""
+
     if not sentences:
         return []
-    _ensure_imports()
-    import torch
-    import os
-    hf_token = os.environ.get("HUGGINGFACE_TOKEN") or os.environ.get("HF_TOKEN")
-    with torch.inference_mode():
-        embs = _sentence_embeddings(
-            sentences, model_name=model_name, device=device, token=hf_token
-        )  # [N, H]
-    scores = _cosine_scores_to_centroid(embs)
-    order = sorted(range(len(sentences)), key=lambda i: scores[i], reverse=True)
+    scores, _ = encoder_route_scores(
+        sentences,
+        model_name=model_name,
+        device=device,
+        batch_size=batch_size,
+        max_model_tokens=max_model_tokens,
+        revision=revision,
+    )
+    order = sorted(range(len(sentences)), key=lambda index: (-scores[index], index))
 
-    u = (unit or "sentences").lower()
-    picked: List[int] = []
-    if u == "sentences":
-        limit = max_sentences if (max_sentences is not None and max_sentences > 0) else len(sentences)
+    if (unit or "sentences").lower() == "sentences":
+        limit = (
+            max_sentences
+            if max_sentences is not None and max_sentences > 0
+            else len(sentences)
+        )
         picked = order[: int(limit)]
-    else:  # tokens budget
+    else:
         budget = int(max_tokens)
+        picked = []
         total = 0
-        for i in order:
-            t = count_tokens(sentences[i])
-            if total + t <= budget:
-                picked.append(i)
-                total += t
-    picked.sort()
-    return picked
+        for index in order:
+            tokens = count_tokens(sentences[index])
+            if total + tokens <= budget:
+                picked.append(index)
+                total += tokens
+    return sorted(picked)
 
 
-# Backward-compatible alias
+# Backward-compatible alias.
 bert_select = encoder_select

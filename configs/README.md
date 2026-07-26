@@ -1,11 +1,21 @@
 # configs — 實驗設定
 
-> ⚠️ **這些是 legacy 設定。** 它們產生的結果全部是在 test set 上調參得到的（見
+> ⚠️ 除 `phase1_mvp_multinews.yaml` 外，**其餘都是 legacy 設定。** 它們產生的結果全部是在 test set 上調參得到的（見
 > `docs/research/CODE_AUDIT_IEEE_Access.md` 的 P0-01），**不可用於新論文**。
 > 保留它們只為了重現 `runs/` 底下的既有 artifact。
-> 新架構的設定會依 `docs/research/ARCHITECTURE.md` 的 schema 另外建立。
+> 新架構以 `phase1_mvp_*.yaml` 命名，且只允許 validation pilot；schema 以 `docs/research/ARCHITECTURE.md` 為準。
 
 歷史設定（`_legacy_archive/`）已排除於版本庫外，只存在原作者本機。
+
+---
+
+## Phase 1 validation MVP
+
+| 檔案 | 用途 | 尚未完成 |
+|---|---|---|
+| `phase1_mvp_multinews.yaml` | canonical Multi-News 上隔離 lexical + pinned sentence encoder，固定 route/total budget、RRF 與 document guard，deterministic greedy selector | pinned PLM 與 3-row wiring smoke 已過；尚缺正式 cost、baseline reality check、route unique recall、output budget freeze，未過 gate 前不可跑 test |
+
+此設定刻意不含 graph 與 NSGA-II：先確認 lexical + semantic MVP 能否勝過同協定 Lead／PacSum，再決定是否擴張完整架構。
 
 ---
 
@@ -80,7 +90,12 @@ python -m src.pipeline.select_sentences \
 | `features.{tf_isf,position,fusion}.version` | `v1`（預設）或 `v2` |
 | `graph_params.threshold` | 圖的邊剪枝閾值 τ |
 | `candidates.k` / `sources` / `mode` | 候選池大小、來源（`score`/`position`/`centrality`/`graph`）、`hard`/`soft` |
-| `length_control.unit` | `tokens`（實為**空白切詞**）或 `sentences` |
+| `candidate_budget.per_route / total` | 新架構的每 route quota 與 selector 最終固定候選數，兩者不可混用 |
+| `compute_budget.mode / enabled_routes` | 目前只實作 validation-frozen `fixed`；宣告 `adaptive` 會直接失敗 |
+| `routes.semantic.*` | sentence encoder 名稱、固定 revision、batch size、`max_model_tokens`；輸出記錄實際 revision 與截斷率 |
+| `routes.graph.*` | 新 graph route 預設 `sparse_knn`；`dense_legacy` 必須明確指定 |
+| `coverage_guard.*` | document／section／position strata 保留規則，不屬於語意 route |
+| `length_control.unit` | `words`、legacy `tokens`（實為**空白切詞**）或 `sentences`；word budget 不再繞過 selector |
 | `optimizer.{method,pop_size,n_gen}` | 選句器與 NSGA-II 參數 |
 | `seed` | 全域亂數種子 |
 

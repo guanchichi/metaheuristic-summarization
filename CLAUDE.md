@@ -93,16 +93,17 @@ greedy reference 不是 official oracle、未做 paired test。新 validation pi
 
 ### 已套用 patch；合併前仍需測試
 
-以下 patch 的方向正確。`pytest` 已加入 `requirements.txt`，`tests/` 目前 52 項全過；
-但 SciTLDR 官方 conformance 與 published-evaluator parity 仍未通過，因此不算完全驗收：
+以下 patch 的方向正確。`pytest` 已加入 `requirements.txt`，`tests/` 目前 103 項全過；
+SciTLDR 官方 conformance 尚未通過；它只在決定保留 optional stress test 時才是必要驗收，不阻塞 GovReport + Multi-News 主線：
 
 | 檔案 | 修正 |
 |---|---|
 | `src/eval/rouge.py` | ROUGE-Lsum、同一 reference 由最高 R1 選定、長度 mismatch fail；仍需 official files2rouge conformance |
-| `src/features/graph.py` | thresholding 前 `.copy()`（原本會就地竄改呼叫端矩陣） |
-| `src/models/extractive/encoder_rank.py` | `load_encoder()` 模型快取；目前只完成 import/smoke，完整效能與裝置測試待做 |
+| `src/features/graph.py` | dense thresholding 不再竄改呼叫端；candidate route 預設改為有界 sparse TF-IDF kNN，整體 selector 仍待 sparse 化 |
+| `src/models/extractive/encoder_rank.py` | 完整輸入 batch encode、模型快取、pinned revision、截斷率與 deterministic cost facts；CPU 與 3-row pipeline smoke 已過，正式 cold/warm/GPU cost pilot 待做 |
 | `src/pipeline/optimizer_dispatch.py` | `pop_size`/`n_gen`/`seed` 接線；**移除靜默 fallback** |
-| `src/eval/oracle.py` | 新增 greedy oracle reference；不是 exact upper bound，SciTLDR official single-sentence oracle 待實作／重現 |
+| `src/objectives/factory.py` | single-sentence 關閉 subset search；canonical multi-sentence 禁止 raw-sum salience；group coverage 與 selector isolation 尚待完成 |
+| `src/eval/oracle.py` | 新增 greedy oracle reference；不是 exact upper bound。SciTLDR official oracle 僅在保留 optional stress test 時實作／重現 |
 
 - 🚫 **絕對不要再加 `except Exception: fallback to greedy`**。研究模式必須 fail loud
 - 🚫 不要在 config 加了鍵值卻沒接線（`pop_size` 就發生過，實際跑的一直是預設 100/100）
@@ -112,6 +113,7 @@ greedy reference 不是 official oracle、未做 paired test。新 validation pi
 - 🚫 **不要用 test set 調參**。validation 調參 → freeze config → test 只跑一次
 - CNN/DM 官方 test 是 **11490**；13368 是 validation
 - SciTLDR 的 `target` 是**多個替代 reference**，`preprocess_scitldr.py` 已改為 canonical `references: list[str]`，不可再串接
+- Multi-News 正式資料只能由 `src.data.preprocess_multinews` 產生；固定 `alexfabbri/multi_news` revision，保留 `|||||` boundary，舊 flat JSONL 僅供 legacy reproduction
 
 ---
 
@@ -152,8 +154,10 @@ python -m src.pipeline.select_sentences --config configs/<cfg>.yaml --split test
 跑測試：
 
 ```bash
-pytest tests/ -q
+python -m pytest -q
 ```
+
+協作時優先使用 feature branch + pull request；GitHub Actions 的 `Unit tests` 必須通過後再合併。若直接 push `master`，CI 只能在 push 後發現問題，無法在沒有 branch protection 的情況下事前阻擋。
 
 跑稽核診斷（見 `scripts/audit/README.md`）：
 

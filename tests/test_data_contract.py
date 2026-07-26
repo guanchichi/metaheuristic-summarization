@@ -42,6 +42,19 @@ def test_fingerprint_detects_content_mutation():
         validate_document_example(example)
 
 
+def test_builder_rejects_misaligned_provenance_metadata():
+    with pytest.raises(SchemaValidationError, match="sentence_metadata"):
+        build_document_example(
+            example_id="bad-mapping",
+            split="test",
+            documents=[["First.", "Second."]],
+            references=["Reference."],
+            input_mode="single_document",
+            output_mode="multi_sentence",
+            sentence_metadata=[[{"original_sentence_position": 0}]],
+        )
+
+
 def test_scitldr_alternative_references_are_not_concatenated():
     row = process_example(
         {
@@ -68,3 +81,58 @@ def test_dataset_validator_rejects_duplicate_ids(monkeypatch):
     assert report["valid"] is False
     assert len(report["dataset_fingerprint"]) == 64
     assert "duplicate example id" in report["errors"][0]["error"]
+
+
+def test_dataset_health_report_contains_streaming_statistics(monkeypatch):
+    example = canonical_example()
+    monkeypatch.setattr(
+        "src.data.validate_dataset.read_jsonl",
+        lambda _path: iter([example]),
+    )
+    report = validate_jsonl("fixture.jsonl", expected_split="test", expected_rows=1)
+    assert report["valid"] is True
+    assert report["health"]["documents_per_example"] == {1: 1}
+    assert report["health"]["references_per_example"] == {2: 1}
+    assert report["health"]["sentence_words"]["max"] == 2
+    assert report["health"]["unicode_replacement_characters"] == 0
+
+
+def test_dataset_validator_rejects_debug_subset_by_default(monkeypatch):
+    example = build_document_example(
+        example_id="debug-row",
+        split="validation",
+        documents=[["A sentence."]],
+        references=["Reference."],
+        input_mode="single_document",
+        output_mode="multi_sentence",
+        metadata={"is_debug_subset": True},
+    )
+    monkeypatch.setattr(
+        "src.data.validate_dataset.read_jsonl",
+        lambda _path: iter([example]),
+    )
+    report = validate_jsonl("debug.jsonl", expected_split="validation")
+    assert report["valid"] is False
+    assert "debug-subset" in report["errors"][0]["error"]
+
+
+def test_dataset_validator_enforces_pinned_revision(monkeypatch):
+    example = build_document_example(
+        example_id="revision-row",
+        split="test",
+        documents=[["A sentence."]],
+        references=["Reference."],
+        input_mode="single_document",
+        output_mode="multi_sentence",
+        metadata={"dataset_revision": "actual-revision"},
+    )
+    monkeypatch.setattr(
+        "src.data.validate_dataset.read_jsonl",
+        lambda _path: iter([example]),
+    )
+    report = validate_jsonl(
+        "revision.jsonl",
+        expected_dataset_revision="expected-revision",
+    )
+    assert report["valid"] is False
+    assert "actual-revision" in report["errors"][0]["error"]

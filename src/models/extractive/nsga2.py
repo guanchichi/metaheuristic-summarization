@@ -8,6 +8,7 @@ from pymoo.optimize import minimize
 from pymoo.core.problem import ElementwiseProblem
 
 from src.utils.tokenizer import count_tokens
+from src.objectives.factory import aggregate_importance
 
 
 # --------------- coverage helpers ---------------
@@ -46,8 +47,9 @@ _COVERAGE_FNS = {
 
 
 def _compute_coverage(sim_mat: np.ndarray, idx: np.ndarray, method: str = "max") -> float:
-    fn = _COVERAGE_FNS.get(method, _coverage_max)
-    return fn(sim_mat, idx)
+    if method not in _COVERAGE_FNS:
+        raise ValueError(f"unknown coverage method: {method!r}")
+    return _COVERAGE_FNS[method](sim_mat, idx)
 
 
 # --------------- problem definition ---------------
@@ -62,6 +64,7 @@ class SummarizationProblem(ElementwiseProblem):
         unit: str = "tokens",
         max_sentences: Optional[int] = None,
         coverage_method: str = "max",
+        importance_aggregation: str = "sum",
     ):
         self.sentences = sentences
         self.importance = np.array(importance)
@@ -70,12 +73,15 @@ class SummarizationProblem(ElementwiseProblem):
         self.unit = (unit or "tokens").lower()
         self.max_sentences = max_sentences if (max_sentences is not None) else 10**9
         self.coverage_method = coverage_method
+        self.importance_aggregation = importance_aggregation
         n = len(sentences)
         super().__init__(n_var=n, n_obj=3, n_constr=1, xl=0, xu=1, type_var=int)
 
     def _evaluate(self, x, out, *args, **kwargs):
         idx = np.where(x > 0)[0]
-        imp = np.sum(self.importance[idx]) if idx.size > 0 else 0.0
+        imp = aggregate_importance(
+            self.importance, idx, self.sentences, self.importance_aggregation
+        )
 
         cov = _compute_coverage(self.sim_mat, idx, self.coverage_method) if idx.size > 0 else 0.0
 
@@ -110,6 +116,7 @@ def nsga2_select(
     n_gen: int = 100,
     seed: Optional[int] = None,
     coverage_method: str = "max",
+    importance_aggregation: str = "sum",
 ) -> List[int]:
     n = len(sentences)
     if n == 0:
@@ -119,6 +126,7 @@ def nsga2_select(
         sentences, importance, sim_mat, max_tokens,
         unit=unit, max_sentences=max_sentences,
         coverage_method=coverage_method,
+        importance_aggregation=importance_aggregation,
     )
 
     algorithm = NSGA2(
@@ -145,7 +153,9 @@ def nsga2_select(
 
     for i, x in enumerate(X):
         idx = np.where(x > 0)[0]
-        imp = np.sum(np.array(importance)[idx]) if idx.size > 0 else 0.0
+        imp = aggregate_importance(
+            np.asarray(importance), idx, sentences, importance_aggregation
+        )
         cov = _compute_coverage(sim_mat, idx, coverage_method) if idx.size > 0 else 0.0
         red = np.mean(sim_mat[np.ix_(idx, idx)][np.triu_indices(len(idx), k=1)]) if idx.size > 1 else 0.0
 

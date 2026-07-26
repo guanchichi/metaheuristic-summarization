@@ -534,6 +534,12 @@ Document record：
 - references 為 list，不是單一任意串接字串。
 - preprocessing metadata。
 
+實作狀態（2026-07-26）：已建立 canonical schema 與 pinned Multi-News preprocessor，保存 source order、raw document/sentence hash、字元 span 與 cleaned-to-original mapping；完整 train/validation/test artifact 與 health manifest 尚待生成，因此舊 flat JSONL 仍不可用於正式結果。
+
+同日已將 provenance 接入 production selector：candidate artifact 保存各 route 的 raw score、完整 rank、percentile、top-K membership、route agreement、RRF fusion、inclusion reason、model revision、截斷統計與 deterministic cost facts；prediction 保存 ordered summary sentences 及其原始 document/section/sentence ID。正式 semantic route 現已在完整輸入上 batch encode 後排名，graph route 預設改為有界 sparse TF-IDF kNN。這些是 correctness contract 已完成，不代表 route utility 已被實驗證實；正式 cost pilot、unique recall 與 quality ablation 仍是 freeze 前必要條件。
+
+2026-07-26 correctness smoke：pinned `all-MiniLM-L6-v2@c9745ed...` 已在 CPU 直接 encode 並正確回報刻意截斷；其後以 canonical Multi-News validation 3-row debug subset 端到端處理 399 句，三列各固定 60 candidates、保存 lexical/semantic provenance 與同一 resolved revision，256 model-token 設定下截斷率皆為 0。此 run 只證明 wiring/artifact contract，不是 validation quality pilot；3-row ROUGE 不得寫入論文結果。
+
 Candidate record：
 
 - document_id、original_sentence_index、text hash。
@@ -600,7 +606,7 @@ Prediction record：
 - 一句摘要任務使用 exact same one-source-sentence constraint，不能用多句但相同 token budget 假裝同設定。
 - 主協定以每篇對多個 gold TLDR 的 max ROUGE 聚合；mean aggregation 只作補充分析。
 - 報 R1、R2、RL，以及 exact single-sentence extractive oracle、Lead-1、PACSUM、official labels baseline。
-- 先重現官方 AIC oracle R1 52.4 與至少一個 released baseline，作為 evaluator conformance test。
+- 若保留 SciTLDR stress test，先重現官方 AIC oracle R1 52.4 與至少一個 released baseline，作為 evaluator conformance test；若不保留則不產生 SciTLDR 比較表。
 - 需明確討論 extractive output 對 abstractive TLDR reference 的 mismatch。
 
 ### 5.3 Multi-News
@@ -975,9 +981,9 @@ IEEE Access 的 reproducibility guidance 特別要求 artifact dependencies、in
 
 ### Phase 2：data/baseline validation，1 週
 
-- 重建兩個 primary datasets；CNN/DailyMail 與 SciTLDR 依定位作 sanity／stress protocol。
+- 重建兩個 primary datasets；CNN/DailyMail 可作 sanity，SciTLDR 僅在 conformance 成本合理且結果有解釋價值時才作 optional stress protocol。
 - 跑 Lead、TextRank、LexRank、PacSum、Sentence-BERT centroid。
-- 驗證 official split；多句資料採明確保留句界的 ROUGE-Lsum，SciTLDR 則用官方 files2rouge、單句與 max-R1-reference 協定重現官方 oracle。
+- 驗證 official split；多句資料採明確保留句界的 ROUGE-Lsum；只有保留 SciTLDR 時，才用官方 files2rouge、單句與 max-R1-reference 協定重現官方 oracle。
 
 完成 gate：baseline 在合理範圍，差異有可解釋來源。
 
@@ -1016,7 +1022,7 @@ IEEE Access 的 reproducibility guidance 特別要求 artifact dependencies、in
 - [ ] 所有 P0 關閉。
 - [ ] test 從未用於調參。
 - [ ] CNN/DailyMail 使用 11,490 筆 test。
-- [ ] SciTLDR 使用官方 split、files2rouge、單句限制與 max-R1-reference 協定，並重現官方 oracle。
+- [ ] **條件式**：若 SciTLDR 保留在實驗中，使用官方 split、files2rouge、單句限制與 max-R1-reference 並重現官方 oracle；否則明確從實驗矩陣移除。
 - [ ] Multi-News data-quality 規則預先固定。
 - [ ] Stage 1 真正輸出 top-K ranked candidates。
 - [ ] Stage 2 使用真實、可追溯的 PLM/graph/statistical scores。

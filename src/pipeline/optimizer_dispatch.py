@@ -44,6 +44,7 @@ def dispatch_optimizer(
     alpha: float,
     unit: str,
     max_sents: Optional[int],
+    objective_spec: Optional[Dict] = None,
 ) -> List[int]:
     """Run the selected optimizer and return picked indices (relative to sub_sentences)."""
 
@@ -92,6 +93,9 @@ def dispatch_optimizer(
             pop_size=int(ocfg.get("pop_size", 100)),
             n_gen=int(ocfg.get("n_gen", 100)),
             seed=cfg.get("seed"),
+            importance_aggregation=str(
+                (objective_spec or {}).get("importance_aggregation", "sum")
+            ),
         )
 
     if method in ("bert", "roberta", "xlnet"):
@@ -103,6 +107,10 @@ def dispatch_optimizer(
         return encoder_select(
             sub_sentences, max_tokens,
             unit=unit, max_sentences=max_sents, model_name=model_name,
+            device=bert_cfg.get("device"),
+            batch_size=int(bert_cfg.get("batch_size", 16)),
+            max_model_tokens=int(bert_cfg.get("max_model_tokens", 256)),
+            revision=bert_cfg.get("revision"),
         )
 
     if method in ("fast", "fast_fused", "tfidf_fused"):

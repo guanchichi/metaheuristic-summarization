@@ -231,7 +231,7 @@ SciTLDR 的舊勝負尚未成立，而且它也不適合當主戰場：
 
 **我的 0.5136 不是官方協定** —— 我用的是「3 句 + 串接後的 reference」。兩個偏差（句數多 → 分數高；串接 reference → 分數低）剛好互相抵消，數字看起來接近但**不可直接與官方 52.4 比較**。
 
-正式論文必須採用官方 files2rouge 協定，並先重現 52.4 作為 evaluator conformance test。
+若正式論文決定保留 SciTLDR stress test，必須採用官方 files2rouge 協定，並先重現 52.4 作為 evaluator conformance test；若不保留 SciTLDR，這項工作不阻塞主線。
 
 ### 4.4 判決
 

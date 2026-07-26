@@ -52,8 +52,11 @@ class TestPipelineGreedy:
 
     def test_summary_matches_indices(self, sample_doc, base_config):
         result = summarize_one(sample_doc, base_config)
-        expected = " ".join(sample_doc["sentences"][i] for i in result["selected_indices"])
+        expected = "\n".join(sample_doc["sentences"][i] for i in result["selected_indices"])
         assert result["summary"] == expected
+        assert result["summary_sentences"] == [
+            sample_doc["sentences"][i] for i in result["selected_indices"]
+        ]
 
 
 class TestPipelineGrasp:
@@ -71,7 +74,6 @@ class TestPipelineWithV2Features:
         }
         result = summarize_one(sample_doc, base_config)
         assert len(result["selected_indices"]) > 0
-
     def test_v2_position(self, sample_doc, base_config):
         base_config["features"] = {
             "position": {"version": "v2", "method": "inverse"},
@@ -101,6 +103,62 @@ class TestPipelineWithV2Features:
         assert len(result["selected_indices"]) > 0
 
 
+class TestCandidateBudgetContract:
+    def test_pipeline_reports_separate_candidate_budget(self, sample_doc, base_config):
+        base_config["candidates"] = {
+            "use": True,
+            "mode": "hard",
+            "sources": ["score"],
+        }
+        base_config["candidate_budget"] = {"per_route": 4, "total": 2}
+        result = summarize_one(sample_doc, base_config)
+        assert result["candidate_pool"]["per_route_quota"] == 4
+        assert result["candidate_pool"]["total_budget"] == 2
+        assert result["candidate_pool"]["actual_size"] == 2
+
+    def test_fixed_compute_budget_controls_enabled_routes(
+        self, sample_doc, base_config
+    ):
+        base_config["candidates"] = {
+            "use": True,
+            "mode": "hard",
+            "sources": ["imaginary_route"],
+        }
+        base_config["compute_budget"] = {
+            "mode": "fixed",
+            "enabled_routes": ["lexical"],
+        }
+        base_config["candidate_budget"] = {"per_route": 2, "total": 2}
+        result = summarize_one(sample_doc, base_config)
+        assert result["candidate_pool"]["configured_sources"] == ["lexical"]
+
+    def test_unimplemented_adaptive_router_fails_loudly(
+        self, sample_doc, base_config
+    ):
+        base_config["candidates"] = {"use": True}
+        base_config["compute_budget"] = {"mode": "adaptive"}
+        with pytest.raises(ValueError, match="adaptive routing"):
+            summarize_one(sample_doc, base_config)
+
+    def test_word_budget_still_dispatches_configured_selector(
+        self, sample_doc, base_config, monkeypatch
+    ):
+        captured = {}
+
+        def fake_dispatch(*args, **kwargs):
+            captured["max_budget"] = args[4]
+            captured["unit"] = args[7]
+            return [0]
+
+        monkeypatch.setattr(
+            "src.pipeline.select_sentences.dispatch_optimizer", fake_dispatch
+        )
+        base_config["length_control"] = {"unit": "words", "max_words": 17}
+        result = summarize_one(sample_doc, base_config)
+        assert result["selected_indices"] == [0]
+        assert captured == {"max_budget": 17, "unit": "words"}
+
+
 class TestPipelineEdgeCases:
     def test_empty_sentences(self, base_config):
         doc = {"id": "empty", "sentences": [], "highlights": ""}
@@ -125,6 +183,47 @@ class TestPipelineEdgeCases:
         result = summarize_one(doc, base_config)
         assert result["id"] == "canonical"
         assert "references" not in result
+        assert len(result["selected_indices"]) == 1
+        assert result["objective_spec"]["active"] == ["salience"]
+        assert all(item["document_id"] is not None for item in result["selected_sentences"])
+
+    def test_single_sentence_task_rejects_nsga2(self, base_config):
+        doc = build_document_example(
+            example_id="single-rank-only",
+            split="validation",
+            documents=[["One sentence.", "Another sentence."]],
+            references=["Reference."],
+            input_mode="single_document",
+            output_mode="single_sentence",
+        )
+        base_config["optimizer"]["method"] = "nsga2"
+        with pytest.raises(ValueError, match="deterministic ranking"):
+            summarize_one(doc, base_config)
+
+    def test_profiled_multi_sentence_defaults_to_mean_importance(self, base_config):
+        doc = build_document_example(
+            example_id="multi-objectives",
+            split="validation",
+            documents=[["One sentence.", "Another sentence."]],
+            references=["Reference."],
+            input_mode="single_document",
+            output_mode="multi_sentence",
+        )
+        result = summarize_one(doc, base_config)
+        assert result["objective_spec"]["importance_aggregation"] == "mean"
+
+    def test_profiled_multi_sentence_rejects_sum_importance(self, base_config):
+        doc = build_document_example(
+            example_id="biased-sum",
+            split="validation",
+            documents=[["One sentence.", "Another sentence."]],
+            references=["Reference."],
+            input_mode="single_document",
+            output_mode="multi_sentence",
+        )
+        base_config["objectives"] = {"importance_aggregation": "sum"}
+        with pytest.raises(ValueError, match="cardinality bias"):
+            summarize_one(doc, base_config)
 
     def test_gold_reference_cannot_change_selection(self, sample_doc, base_config):
         first = dict(sample_doc, highlights="Completely unrelated gold text.")

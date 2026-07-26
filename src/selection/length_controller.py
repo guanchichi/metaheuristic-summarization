@@ -16,14 +16,15 @@ def will_fit_unit(
     max_sentences: Optional[int] = None,
 ) -> bool:
     """Check if candidate can be added under the given unit constraint.
-    - unit == "tokens": respect max_tokens (fallback if unset).
-    - unit == "sentences": cap by number of sentences (count of selected + 1).
+    ``max_sentences`` is an independent hard cap for every unit. ``unit`` then
+    chooses the word/token-like budget used in addition to that cap.
     """
+    if max_sentences is not None and max_sentences > 0:
+        if (len(current_texts) + 1) > int(max_sentences):
+            return False
     u = (unit or "tokens").lower()
     if u == "sentences":
-        if max_sentences is None or max_sentences <= 0:
-            return True
-        return (len(current_texts) + 1) <= int(max_sentences)
+        return True
     # default: tokens
     mt = max_tokens if (max_tokens is not None) else 10**9
     return will_fit(current_texts, candidate, int(mt))
@@ -46,4 +47,3 @@ def trim_to_max_sentences(texts: List[str], max_sentences: int) -> List[str]:
     if max_sentences is None or max_sentences <= 0:
         return texts
     return texts[: max_sentences]
-

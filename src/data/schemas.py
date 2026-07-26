@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from typing import Any, Dict, Iterable, List, Mapping, Optional
 
 
@@ -65,40 +66,61 @@ def build_document_example(
     output_mode: str,
     dataset_name: Optional[str] = None,
     metadata: Optional[Mapping[str, Any]] = None,
+    document_metadata: Optional[Iterable[Mapping[str, Any]]] = None,
+    sentence_metadata: Optional[Iterable[Iterable[Mapping[str, Any]]]] = None,
 ) -> Dict[str, Any]:
     """Construct and validate a canonical ``DocumentExample`` dictionary."""
 
     example_id = _nonempty_string(example_id, "id")
+    document_rows = [list(sentence_texts) for sentence_texts in documents]
+    document_metadata_rows = list(document_metadata) if document_metadata is not None else None
+    sentence_metadata_rows = (
+        [list(items) for items in sentence_metadata] if sentence_metadata is not None else None
+    )
+    if document_metadata_rows is not None and len(document_metadata_rows) != len(document_rows):
+        raise SchemaValidationError("document_metadata length must match documents length")
+    if sentence_metadata_rows is not None and len(sentence_metadata_rows) != len(document_rows):
+        raise SchemaValidationError("sentence_metadata length must match documents length")
+
     canonical_documents: List[Dict[str, Any]] = []
-    for document_position, sentence_texts in enumerate(documents):
+    for document_position, sentence_texts in enumerate(document_rows):
         document_id = f"{example_id}:d{document_position:03d}"
+        current_sentence_metadata = (
+            sentence_metadata_rows[document_position] if sentence_metadata_rows is not None else None
+        )
+        if current_sentence_metadata is not None and len(current_sentence_metadata) != len(sentence_texts):
+            raise SchemaValidationError(
+                f"sentence_metadata[{document_position}] length must match its sentence count"
+            )
         sentences = []
         for sentence_position, text in enumerate(sentence_texts):
             text = _nonempty_string(
                 text,
                 f"documents[{document_position}].sentences[{sentence_position}]",
             )
-            sentences.append(
-                {
-                    "sentence_id": f"{document_id}:s{sentence_position:06d}",
-                    "text": text,
-                    "document_position": sentence_position,
-                    "section_position": sentence_position,
-                }
-            )
-        canonical_documents.append(
-            {
-                "document_id": document_id,
-                "source_order": document_position,
-                "sections": [
-                    {
-                        "section_id": f"{document_id}:section:000",
-                        "heading": None,
-                        "sentences": sentences,
-                    }
-                ],
+            sentence = {
+                "sentence_id": f"{document_id}:s{sentence_position:06d}",
+                "text": text,
+                "document_position": sentence_position,
+                "section_position": sentence_position,
             }
-        )
+            if current_sentence_metadata is not None:
+                sentence["metadata"] = dict(current_sentence_metadata[sentence_position])
+            sentences.append(sentence)
+        canonical_document = {
+            "document_id": document_id,
+            "source_order": document_position,
+            "sections": [
+                {
+                    "section_id": f"{document_id}:section:000",
+                    "heading": None,
+                    "sentences": sentences,
+                }
+            ],
+        }
+        if document_metadata_rows is not None:
+            canonical_document["metadata"] = dict(document_metadata_rows[document_position])
+        canonical_documents.append(canonical_document)
 
     refs = normalize_references(references)
     task_profile = {"input_mode": input_mode, "output_mode": output_mode}
@@ -143,6 +165,8 @@ def validate_document_example(example: Mapping[str, Any]) -> None:
         raise SchemaValidationError(
             f"task_profile.output_mode must be one of {sorted(VALID_OUTPUT_MODES)}"
         )
+    if "metadata" in example and not isinstance(example["metadata"], Mapping):
+        raise SchemaValidationError("metadata must be an object")
 
     documents = example.get("documents")
     if not isinstance(documents, list) or not documents:
@@ -164,6 +188,8 @@ def validate_document_example(example: Mapping[str, Any]) -> None:
         document_ids.add(document_id)
         if document.get("source_order") != doc_i:
             raise SchemaValidationError(f"documents[{doc_i}].source_order must equal {doc_i}")
+        if "metadata" in document and not isinstance(document["metadata"], Mapping):
+            raise SchemaValidationError(f"documents[{doc_i}].metadata must be an object")
         sections = document.get("sections")
         if not isinstance(sections, list) or not sections:
             raise SchemaValidationError(f"documents[{doc_i}].sections must be a non-empty list")
@@ -199,6 +225,8 @@ def validate_document_example(example: Mapping[str, Any]) -> None:
                     raise SchemaValidationError(f"duplicate sentence_id: {sentence_id}")
                 sentence_ids.add(sentence_id)
                 _nonempty_string(sentence.get("text"), f"{prefix}.text")
+                if "metadata" in sentence and not isinstance(sentence["metadata"], Mapping):
+                    raise SchemaValidationError(f"{prefix}.metadata must be an object")
                 if sentence.get("document_position") != expected_document_position:
                     raise SchemaValidationError(
                         f"{prefix}.document_position must equal {expected_document_position}"
@@ -236,6 +264,118 @@ def flatten_sentence_texts(example: Mapping[str, Any]) -> List[str]:
         for section in document["sections"]
         for sentence in section["sentences"]
     ]
+
+
+def flatten_sentence_records(example: Mapping[str, Any]) -> List[Dict[str, Any]]:
+    """Flatten text for optimizers while retaining stable source provenance."""
+
+    if "documents" not in example:
+        sentences = flatten_sentence_texts(example)
+        example_id = str(example.get("id") or "legacy")
+        return [
+            {
+                "sentence_id": f"{example_id}:legacy:s{index:06d}",
+                "text": text,
+                "original_index": index,
+                "document_id": None,
+                "section_id": None,
+                "document_position": index,
+                "section_position": None,
+                "provenance_status": "unavailable_legacy_flat_input",
+            }
+            for index, text in enumerate(sentences)
+        ]
+
+    validate_document_example(example)
+    records: List[Dict[str, Any]] = []
+    for document in sorted(example["documents"], key=lambda item: item["source_order"]):
+        for section in document["sections"]:
+            for sentence in section["sentences"]:
+                records.append(
+                    {
+                        "sentence_id": sentence["sentence_id"],
+                        "text": sentence["text"],
+                        "original_index": len(records),
+                        "document_id": document["document_id"],
+                        "section_id": section["section_id"],
+                        "document_position": sentence["document_position"],
+                        "section_position": sentence["section_position"],
+                        "source_order": document["source_order"],
+                        "provenance_status": "available",
+                        "metadata": dict(sentence.get("metadata", {})),
+                    }
+                )
+    return records
+
+
+def validate_candidate_record(record: Mapping[str, Any]) -> None:
+    """Validate the minimum provenance/ranking contract for one candidate."""
+
+    _nonempty_string(record.get("sentence_id"), "candidate.sentence_id")
+    if not isinstance(record.get("original_index"), int) or record["original_index"] < 0:
+        raise SchemaValidationError("candidate.original_index must be a non-negative integer")
+    _nonempty_string(record.get("text"), "candidate.text")
+    if not isinstance(record.get("word_count"), int) or record["word_count"] < 1:
+        raise SchemaValidationError("candidate.word_count must be a positive integer")
+    route_scores = record.get("route_scores")
+    if not isinstance(route_scores, Mapping) or not route_scores:
+        raise SchemaValidationError("candidate.route_scores must be a non-empty object")
+    for route, score in route_scores.items():
+        if not isinstance(score, Mapping):
+            raise SchemaValidationError(f"candidate.route_scores.{route} must be an object")
+        raw = score.get("raw")
+        if not isinstance(raw, (int, float)) or not math.isfinite(float(raw)):
+            raise SchemaValidationError(
+                f"candidate.route_scores.{route}.raw must be finite"
+            )
+        if not isinstance(score.get("rank"), int) or score["rank"] < 1:
+            raise SchemaValidationError(f"candidate.route_scores.{route}.rank must be positive")
+        percentile = score.get("percentile")
+        if not isinstance(percentile, (int, float)) or not 0.0 <= percentile <= 1.0:
+            raise SchemaValidationError(
+                f"candidate.route_scores.{route}.percentile must be in [0, 1]"
+            )
+        _nonempty_string(
+            score.get("route_type"), f"candidate.route_scores.{route}.route_type"
+        )
+        _nonempty_string(
+            score.get("model_revision"),
+            f"candidate.route_scores.{route}.model_revision",
+        )
+        if not isinstance(score.get("estimated_cost"), Mapping):
+            raise SchemaValidationError(
+                f"candidate.route_scores.{route}.estimated_cost must be an object"
+            )
+        if not isinstance(score.get("metadata"), Mapping):
+            raise SchemaValidationError(
+                f"candidate.route_scores.{route}.metadata must be an object"
+            )
+
+    selected_by = record.get("selected_by_routes")
+    if not isinstance(selected_by, list) or not all(
+        isinstance(route, str) and route in route_scores for route in selected_by
+    ):
+        raise SchemaValidationError(
+            "candidate.selected_by_routes must contain known route names"
+        )
+    if record.get("route_agreement") != len(selected_by):
+        raise SchemaValidationError(
+            "candidate.route_agreement must match selected_by_routes"
+        )
+    fusion_score = record.get("fusion_score")
+    if not isinstance(fusion_score, (int, float)) or not math.isfinite(
+        float(fusion_score)
+    ):
+        raise SchemaValidationError("candidate.fusion_score must be finite")
+    if not isinstance(record.get("fused_rank"), int) or record["fused_rank"] < 1:
+        raise SchemaValidationError("candidate.fused_rank must be positive")
+    reasons = record.get("inclusion_reasons")
+    if not isinstance(reasons, list) or not reasons or not all(
+        isinstance(reason, str) and reason for reason in reasons
+    ):
+        raise SchemaValidationError(
+            "candidate.inclusion_reasons must be a non-empty list of strings"
+        )
 
 
 def extract_references(example: Mapping[str, Any]) -> List[str]:

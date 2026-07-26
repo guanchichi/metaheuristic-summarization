@@ -15,7 +15,7 @@
 | Stage 2 的 `w_bert` 參數 | 🔴 **命名誤導** —— 它加權的是 TF-IDF 分數，不是 BERT。Stage 2 目前沒有 PLM |
 | ROUGE-L | 🟠 舊碼用單序列 `rougeL`；已改為多句適用的 `rougeLsum`，但與 published Perl ROUGE 的 parity 尚未驗證 |
 | Baseline（Lead / TextRank / LexRank / PacSum） | 🔴 **尚未實作** —— 舊論文表格的 baseline 數字引用自其他論文，不是本 repo 產出 |
-| 三軌候選生成 | 🟠 三軌目前共用同一個預先過濾的候選池，不是各自在完整輸入上排名 |
+| 三軌候選生成 | 🟠 correctness contract 已完成：各 route 在完整輸入排名、固定總候選 budget、RRF provenance、coverage guard；實際效益仍待 validation pilot |
 
 **簡言之：程式可以跑，但目前的輸出不能當研究結論。**
 
@@ -84,8 +84,10 @@ pip install -r requirements-demo.txt
 跑測試：
 
 ```bash
-pytest tests/ -q
+python -m pytest -q
 ```
+
+GitHub Actions 會在每次 push 到 `master` 或針對 `master` 的 pull request 自動執行相同測試。這是 unit-test CI，不會下載完整資料、模型或執行正式 benchmark；研究結果仍須依 `ACTION_PLAN.md` 的 gate 另外驗收。
 
 ---
 
@@ -105,18 +107,25 @@ pytest tests/ -q
 
 ## 快速開始
 
-前處理：
+Multi-News canonical 前處理（固定作者資料集 revision、保留 `|||||` 多文件邊界）：
 
 ```bash
-python -m src.data.preprocess --input data/raw/validation.csv --split validation \
-  --out data/processed/validation.jsonl --max_sentences 25
+python -m src.data.preprocess_multinews --split validation \
+  --out data/processed/multi_news_validation_canonical.jsonl
+python -m src.data.validate_dataset \
+  --input data/processed/multi_news_validation_canonical.jsonl \
+  --split validation --expected_rows 5622 \
+  --expected_dataset_revision 1f20a01dbf6463236108a8d7fd39f3ae9750dcc3 \
+  --report_out data/processed/multi_news_validation_health.json
 ```
 
-選句：
+Phase 1 Multi-News validation MVP（第一次會下載 pinned sentence encoder；不可先跑 test）：
 
 ```bash
-python -m src.pipeline.select_sentences --config configs/1_Base_NSGA2.yaml \
-  --split validation --input data/processed/validation.jsonl --run_dir runs
+python -m src.pipeline.select_sentences --config configs/phase1_mvp_multinews.yaml \
+  --split validation \
+  --input data/processed/multi_news_validation_canonical.jsonl \
+  --run_dir runs --stamp phase1-mvp-multinews-validation
 ```
 
 評估（ROUGE-1/2/Lsum）：
@@ -152,11 +161,11 @@ python -m src.eval.oracle --input data/processed/multi_news_test.jsonl --max_wor
 
 投稿前必須處理，詳見團隊內部重構計畫：
 
-- `src/data/preprocess.py` 用正則分句，未處理縮寫與小數，會產生過長的偽句子
+- 舊的 flat `multi_news_*.jsonl` 已遺失 source-document boundary，只能重現 legacy artifact；正式實驗必須使用 `*_canonical.jsonl`
 - `src/data/preprocess_scitldr.py` 已保留 SciTLDR 多個替代 reference；`scitldr_official` 評估在官方 wrapper 通過一致性測試前會拒絕執行
 - `src/features/semantic.py` 的 `centrality` 與 `novelty` 數學上完全反相關，同時加權是退化的
-- `graph_params.threshold` 只作用於候選池，未套用到 graph 特徵分數
-- NSGA-II 的 importance 目標使用總和，與 coverage 一起把解推向長度上限
+- graph candidate route 已使用有界 sparse kNN，但 selector／coverage objective 目前仍可能建立 dense `N×N` similarity；完成 sparse selector/objective 後才能宣稱整條長文件 pipeline 都是 sparse
+- canonical task-profile objective 已禁止 raw-sum salience；legacy config 仍保留歷史 sum 行為，因此舊 run 依然有被長度上限支配的問題
 
 ---
 

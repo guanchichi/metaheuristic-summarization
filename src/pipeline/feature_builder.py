@@ -62,32 +62,48 @@ def build_base_scores(
         "novelty": float(weights_cfg.get("novelty", 0.0)),
     }
 
-    # --- semantic: centrality ---
+    # NOTE: the legacy "centrality" feature is TF-IDF centroid similarity,
+    # not a PLM semantic score. The true PLM path lives in candidate routing.
     f_centrality = [0.0] * len(sentences)
     if weights["centrality"] > 1e-9:
         try:
             f_centrality = sentence_centrality_scores(sentences, similarity_matrix=similarity_matrix)
-        except Exception:
-            f_centrality = [0.0] * len(sentences)
+        except Exception as exc:
+            raise RuntimeError("enabled TF-IDF centrality feature failed") from exc
+        if len(f_centrality) != len(sentences):
+            raise RuntimeError("TF-IDF centrality feature returned the wrong number of scores")
 
-    # --- semantic: novelty ---
+    # --- similarity novelty ---
     f_novelty = [0.0] * len(sentences)
-    if weights["novelty"] > 1e-9 and similarity_matrix is not None:
+    if weights["novelty"] > 1e-9:
+        if similarity_matrix is None:
+            raise RuntimeError(
+                "novelty feature is enabled but no similarity matrix was configured"
+            )
         try:
             f_novelty = sentence_novelty_scores(similarity_matrix)
-        except Exception:
-            f_novelty = [0.0] * len(sentences)
+        except Exception as exc:
+            raise RuntimeError("enabled novelty feature failed") from exc
+        if len(f_novelty) != len(sentences):
+            raise RuntimeError("novelty feature returned the wrong number of scores")
 
     # --- graph ---
-    f_graph: List[float] = []
-    if weights["graph"] > 1e-9 and similarity_matrix is not None:
+    f_graph: List[float] = [0.0] * len(sentences)
+    if weights["graph"] > 1e-9:
+        if similarity_matrix is None:
+            raise RuntimeError(
+                "graph feature is enabled but no similarity matrix was configured"
+            )
         try:
-            f_graph = compute_textrank_scores(similarity_matrix)
-        except Exception as e:
-            print(f"Warning: Graph score computation failed: {e}")
-            f_graph = [0.0] * len(sentences)
-    else:
-        f_graph = [0.0] * len(sentences)
+            graph_cfg = cfg.get("graph_params", {}) or {}
+            f_graph = compute_textrank_scores(
+                similarity_matrix,
+                threshold=float(graph_cfg.get("threshold", 0.0)),
+            )
+        except Exception as exc:
+            raise RuntimeError("enabled graph feature failed") from exc
+        if len(f_graph) != len(sentences):
+            raise RuntimeError("graph feature returned the wrong number of scores")
 
     # --- fuse ---
     feats = {

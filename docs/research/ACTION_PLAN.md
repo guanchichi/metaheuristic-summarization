@@ -84,10 +84,10 @@
 ### 1a. Patch 已套用，但尚未完成驗收
 
 - [~] `src/eval/rouge.py` → 已改 ROUGE-Lsum、同一 reference 由最高 R1 選定、長度 mismatch fail；待 pytest 與 published-protocol parity
-- [~] `src/eval/oracle.py` → 已有 greedy oracle reference；不得稱 exact upper bound，待加入／重現 SciTLDR official single-sentence oracle
-- [~] `src/features/graph.py` → `.copy()` smoke test 通過；待正式 regression test suite
-- [~] `src/models/extractive/encoder_rank.py` → 模型快取 patch 已加；待多文件、CPU/GPU、cache-clear 與效能測試
-- [~] `src/pipeline/optimizer_dispatch.py` → 參數接線與 no-fallback smoke test 通過；待 pytest regression
+- [~] `src/eval/oracle.py` → 已有 greedy oracle reference；不得稱 exact upper bound。SciTLDR official single-sentence oracle 僅在決定保留該 stress test 時才實作／重現
+- [x] `src/features/graph.py` → dense input 不被 mutation、dangling mass、zero diagonal、sparse edge bound 均有 regression tests
+- [x] `src/models/extractive/encoder_rank.py` → 模型快取、完整輸入 batch encode、revision/truncation artifact 已接線；pinned MiniLM CPU smoke 與 3-row canonical pipeline 通過（GPU 與正式成本屬後續 cost pilot）
+- [x] `src/pipeline/optimizer_dispatch.py` → NSGA-II 參數接線與 no-fallback pytest regression 已通過
 - [x] `src/pipeline/select_sentences.py`／`evaluate.py` → production prediction 不再攜帶 gold；評估另以 `--gold` 按 ID 嚴格對齊，並禁止 `candidates.recall_target`
 - [x] `scripts/audit/` → 稽核診斷腳本已版本化（`lead_vs_system` / `selection_diagnostics` / `dataset_headroom` / `plm_timing`），
       由版本化位置重跑確認 F-0 與 61.7%／22.8% 數字完全一致；用法見 `scripts/audit/README.md`
@@ -95,56 +95,57 @@
 
 **1a 的共同驗收條件**（全部完成才能把上面的 `[~]` 改成 `[x]`）：
 
-- [x] `pip install pytest` 並讓 `tests/` 能跑（2026-07-26：65 passed）
+- [x] `pip install pytest` 並讓 `tests/` 能跑（2026-07-26：103 passed）
 - [ ] 每個 patch 都有對應的 regression test（見 1e）
-- [ ] SciTLDR official single-sentence oracle 重現 R1 ≈ 52.4
+- [ ] **條件式**：若保留 SciTLDR stress test，official single-sentence oracle 須重現 R1 ≈ 52.4；若不保留，維持 evaluator fail-closed 即可，不阻塞 Phase 1
 
 ### 1b. 資料層
 
 - [x] 🔴 `preprocess_scitldr.py`：**停止串接 multi-reference**，`references` 存成 list（2026-07-26；含 canonical schema 與 golden test）
-- [ ] 分句改用 NLTK punkt 或 spaCy
-      （現況：正則分句造成 358/37349 個「句子」超過 80 字，最長 855 字）
-- [ ] Multi-News 正確處理 `|||||` 分隔符與換行雜訊；修編碼（少數 U+FFFD）
-- [ ] 從原始資料重建 Multi-News，保存每個 source document 的 boundary、source order 與 original-to-cleaned mapping；現有扁平 `sentences` 不得進正式實驗
+- [~] canonical Multi-News 已改用 deterministic NLTK Punkt 並保存 char-span mapping；GovReport／CNN-DM 仍須各自驗證分句規則
+      （legacy 正則分句曾造成 358/37349 個「句子」超過 80 字，最長 855 字，該 flat artifact 不得進正式實驗）
+- [x] Multi-News preprocessor 正確保留 `|||||` 分隔與換行 mapping；U+FFFD 預設 fail closed（2026-07-26，golden tests 已加）
+- [~] 已實作從 pinned 作者資料重建 Multi-News，保存 boundary、source order、raw char span、hash 與 original-to-cleaned mapping；待實際產生三個完整 split 與 manifest，現有扁平 `sentences` 不得進正式實驗
 - [ ] 下載並驗證 GovReport 官方資料：split、row count、checksum、license、section metadata 與異常列規則
-- [ ] 將 `max_words / max_sentences / max_model_tokens / candidate_budget / compute_budget` 拆成不同欄位；不得再以 `max_tokens` 混用
+- [x] `max_words / max_sentences / max_model_tokens / candidate_budget / compute_budget` 已拆成不同設定與 output artifact；`unit: words` 不再繞過 selector
 - [ ] 重建 **CNN/DM 官方 split**：train 287,113 / validation 13,368 / **test 11,490**
-- [ ] 資料健檢報告：筆數、空文件、句長分布、reference 數、checksum
+- [~] 資料健檢器已實作：筆數、ID、split、文件／reference 數、句長分布、U+FFFD、debug subset、revision 與 checksum；待完整資料生成後保存三個正式報告
       （已知：Multi-News test 有 1 筆零句文件、`test_4241` 有 3,295 句）
 
 ### 1c. 候選生成重構 🔴 這是核心
 
-- [ ] 🔴 **lexical、semantic、sparse graph/structure 三路各自在完整輸入上獨立排名**，不可先被共同候選池截斷
-- [ ] 🔴 **候選池多來源聯集**：各 route 先獨立 top-K，再以固定 total candidate budget 合併
-- [ ] 🔴 加入 position／document／section strata coverage guard；它們不是第四個語意 route
-- [ ] candidate record 保留 `sentence_id / original_index / document_id / section_id / route raw score / rank / percentile / model revision / route cost`
-- [ ] K 必須在 rank 排序階段截取，不是按原文位置
+- [x] 🔴 **lexical、semantic、sparse graph/structure 三路各自在完整輸入上獨立排名**，不可先被共同候選池截斷
+- [x] 🔴 **候選池多來源聯集**：lexical／semantic sentence encoder／sparse graph 均先對完整輸入評分再取 route quota；以 RRF/provenance 融合後套固定 total candidate budget
+- [x] 🔴 position／document／section strata coverage guard 已可獨立設定；輸出明記 `guard:*` reason，且不把它們宣稱為第四個語意 route
+- [x] candidate record 保存 `sentence_id / original_index / document_id / section_id / route raw score / rank / percentile / route agreement / fusion score / inclusion reason / model revision / deterministic cost facts`
+- [x] K 在完整 rank 排序後截取；固定 total budget 依 RRF rank 截取，最後才按原文位置輸出候選
 
 ### 1d. 路由與融合層
 
-- [ ] semantic route 使用明確 sentence-encoder checkpoint、一次載入、batch encode，記錄 `max_model_tokens` 與截斷率
-- [ ] graph route 改為有界 sparse kNN／block graph；不得以 dense `N×N` 作長文件預設
-- [ ] 先以 rank percentile／reciprocal-rank fusion／route agreement 融合，不直接平均不可比分數
-- [ ] 缺失或失敗 route 記為 `null + reason` 並使正式 run fail；不得填 0 或靜默 fallback
-- [ ] route budget allocator 第一版只能使用 inference-time 可得的廉價特徵，threshold 在 validation 凍結
+- [~] semantic route 已要求明確 sentence-encoder checkpoint/revision、一次載入、batch encode，並記錄 `max_model_tokens` 與截斷率；pinned MiniLM 真實 CPU 與 3-row Multi-News smoke 已通過，尚待正式 cold/warm cost pilot
+- [x] graph candidate route 預設為有界 TF-IDF cosine sparse kNN；dense `N×N` 僅能以 `dense_legacy` 明確啟用
+- [x] 候選融合採 reciprocal-rank fusion、rank percentile 與 route agreement，不平均不可比分數
+- [x] candidate route 與已啟用 feature 失敗會使 run fail；不再填 0 或靜默 fallback
+- [~] 已建立 `compute_budget.mode: fixed` 與明確 enabled routes；adaptive allocator 尚未實作，若誤設為 adaptive 會 fail loud
 
 ### 1e. Objective 與 selector contract
 
-- [ ] 由 task profile 啟用 objective：單句關閉 redundancy 與 subset NSGA-II；多文件才啟用 document-group coverage
-- [ ] salience、coverage、redundancy 統一方向與尺度；sum／mean／length-normalized aggregation 由 validation pilot 決定，不得讓集合大小隱性支配
-- [ ] hard constraint 明確處理 `min_words / max_words / max_sentences`，空集合不是合法摘要
+- [~] task-profile factory 已使單句只啟用 salience、強制一個句子並拒絕 subset NSGA-II；document-group coverage 尚未實作，若提前宣告會 fail loud
+- [~] canonical multi-sentence 已禁止 raw sum，僅允許 mean／length-normalized salience；coverage/redundancy 的跨文件尺度仍待 validation pilot
+- [~] `max_words / max_sentences` 已成獨立 hard constraint；`min_words` 與空集合修復策略尚待補
 - [ ] deterministic greedy／MMR 與 NSGA-II 使用完全相同 candidates、objectives 與 constraints
 
 ### 1f. 測試
 
+- [x] GitHub Actions unit-test CI：push／PR 到 `master` 自動 compile + `python -m pytest -q`；正式 benchmark 不納入輕量 CI
 - [ ] TF-ISF / length / position 的手算 golden tests
 - [ ] `rougeL` vs `rougeLsum` golden test
-- [ ] SciTLDR 官方 reference aggregation golden test：以最高 R1 選一個 reference，R2/RL 必須沿用同一 reference
-- [ ] Graph：diagonal、threshold、dangling node
-- [ ] 候選 top-K rank 保序測試
-- [ ] canonical schema 保存 Multi-News document boundaries；route failure 不得被 0 分掩蓋
-- [ ] task-profile matrix 測試：single sentence 不得建立 redundancy objective 或呼叫 subset NSGA-II
-- [ ] NSGA-II 參數傳遞、seed 決定性、**no-fallback** 測試
+- [ ] **條件式**：若保留 SciTLDR，加入官方 reference aggregation golden test；若刪除該實驗，不列入 Gate 1
+- [x] Graph：diagonal、threshold、dangling node、sparse edge bound
+- [x] 候選 top-K rank、RRF total budget、route provenance 與 document guard 測試
+- [x] canonical schema 與 production prediction 已保存 Multi-News document boundaries／selected sentence provenance；candidate route 與 enabled feature 均 fail loud
+- [~] task-profile matrix 已測 single sentence 不建立 redundancy objective且拒絕 subset NSGA-II；multi-document group coverage 尚未完成
+- [~] NSGA-II 參數傳遞與 **no-fallback** 已測；seed 跨重跑決定性尚待補
 - [ ] 10 篇 toy pipeline snapshot test
 
 **Gate 1**：所有手算測試通過；同 seed 重跑得到相同 indices；故意移除 pymoo 時 run 必須 fail。
@@ -159,15 +160,15 @@
       - CNN/DM：Lead-3
       - GovReport：同 word budget 的 Lead
       - Multi-News：同 word budget 的 Lead
-      - SciTLDR：Lead-1
+      - SciTLDR：Lead-1（僅在保留 stress test 時）
 - [ ] TextRank、LexRank（本地執行同 pipeline；優先重用官方／可信實作並鎖版本）
 - [ ] PacSum
 - [ ] Sentence-BERT centroid + MMR
 - [ ] Random（固定 seed）
 - [ ] Exact extractive oracle（可行時）或明確標示的 greedy reference（不可稱 upper bound）
-- [ ] SciTLDR **evaluator conformance test**：使用官方 `files2rouge` wrapper、單句限制，先以最大 R1 選定同一 reference，再報該 reference 的 R1/R2/RL；重現 official oracle R1 ≈ 52.4
+- [ ] **條件式 SciTLDR evaluator conformance**：只有決定保留 stress test 才使用官方 `files2rouge`、單句限制與 max-R1-reference，並重現 oracle R1 ≈ 52.4；否則不執行也不報 SciTLDR 結果
 
-**Gate 2**：所有 baseline 在同一 evaluator 下跑出合理數字；SciTLDR 官方 oracle 重現成功。
+**Gate 2**：兩個 primary benchmark 的 baseline 在各自明確 evaluator 下跑出合理數字；若保留 SciTLDR，才追加官方 oracle conformance gate。
 
 ---
 

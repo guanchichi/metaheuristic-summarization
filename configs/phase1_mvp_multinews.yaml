@@ -1,0 +1,65 @@
+# Validation-only Phase 1 MVP. Do not use on the test split before freeze.
+# This isolates lexical + semantic candidate utility with a deterministic
+# selector; graph and NSGA-II are deliberately excluded from the first gate.
+
+experiment:
+  status: validation_pilot_only
+  dataset: multi_news
+
+seed: 2024
+
+features:
+  tf_isf:
+    version: v2
+    use_stopwords: true
+    use_sublinear_tf: true
+    use_bigrams: false
+  weights:
+    importance: 1.0
+    length: 0.0
+    position: 0.0
+    graph: 0.0
+    centrality: 0.0
+    novelty: 0.0
+
+representations:
+  use: true
+  method: tfidf
+
+compute_budget:
+  mode: fixed
+  enabled_routes: [lexical, semantic]
+
+candidate_budget:
+  per_route: 40
+  total: 60
+
+candidates:
+  use: true
+  mode: hard
+  rrf_constant: 60
+
+routes:
+  lexical:
+    revision: tf_isf_v2:sublinear_unigram
+  semantic:
+    model_name: sentence-transformers/all-MiniLM-L6-v2
+    revision: c9745ed1d9f207416be6d2e6f8de32d1f16199bf
+    batch_size: 16
+    max_model_tokens: 256
+
+coverage_guard:
+  enabled: true
+  document: true
+  section: false
+  position: false
+
+optimizer:
+  method: greedy
+
+length_control:
+  unit: words
+  max_words: 250
+
+redundancy:
+  lambda: 0.7

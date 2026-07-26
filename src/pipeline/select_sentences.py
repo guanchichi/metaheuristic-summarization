@@ -22,11 +22,12 @@ from src.utils.io import (
 )
 from src.representations.sent_vectors import SentenceVectors
 from src.representations.similarity import cosine_similarity_matrix
-from src.data.schemas import flatten_sentence_texts
+from src.data.schemas import flatten_sentence_records
 
 from src.pipeline.feature_builder import build_base_scores
-from src.pipeline.candidate_builder import build_candidate_union
+from src.pipeline.candidate_builder import build_candidate_records
 from src.pipeline.optimizer_dispatch import dispatch_optimizer
+from src.objectives.factory import build_objective_spec, validate_selector_for_task
 
 
 # ------------------------------------------------------------------ #
@@ -44,7 +45,8 @@ def validate_requested_split(doc: Dict, requested_split: str) -> None:
 
 
 def summarize_one(doc: Dict, cfg: Dict) -> Dict:
-    sentences: List[str] = flatten_sentence_texts(doc)
+    sentence_records = flatten_sentence_records(doc)
+    sentences: List[str] = [record["text"] for record in sentence_records]
 
     cand_cfg = cfg.get("candidates", {})
     # A gold-reference-dependent candidate size is an oracle diagnostic, not
@@ -72,20 +74,82 @@ def summarize_one(doc: Dict, cfg: Dict) -> Dict:
     # 3. Length / redundancy parameters
     lc = cfg.get("length_control", {})
     unit = (lc.get("unit", "tokens") or "tokens").lower()
+    if unit not in {"words", "tokens", "sentences"}:
+        raise ValueError("length_control.unit must be words, tokens, or sentences")
     max_tokens = int(lc.get("max_tokens", 100))
+    max_words = int(lc.get("max_words", 400))
+    selector_budget = max_words if unit == "words" else max_tokens
     max_sents_limit = lc.get("max_sentences", None)
     max_sents = int(max_sents_limit) if (max_sents_limit is not None) else None
     alpha = float(cfg.get("redundancy", {}).get("lambda", 0.7))
+    objective_spec = build_objective_spec(doc.get("task_profile"), cfg)
+    method_opt = cfg.get("optimizer", {}).get("method", "greedy").lower()
+    validate_selector_for_task(objective_spec, method_opt)
+    required_max_sentences = objective_spec.get("required_max_sentences")
+    if required_max_sentences is not None:
+        if max_sents is not None and max_sents != required_max_sentences:
+            raise ValueError(
+                f"task profile requires max_sentences={required_max_sentences}, "
+                f"but config declares {max_sents}"
+            )
+        max_sents = int(required_max_sentences)
 
-    # 4. Candidate pool
-    k = int(cand_cfg.get("k", min(15, len(sentences))))
+    # 4. Candidate pool. Per-route quota and final selector budget are
+    # deliberately separate from the output-length budget above.
+    budget_cfg = cfg.get("candidate_budget", {})
+    if isinstance(budget_cfg, dict):
+        per_route_budget = budget_cfg.get("per_route", cand_cfg.get("k"))
+        total_candidate_budget = budget_cfg.get(
+            "total", cand_cfg.get("total_budget")
+        )
+    elif budget_cfg in (None, {}):
+        per_route_budget = cand_cfg.get("k")
+        total_candidate_budget = cand_cfg.get("total_budget")
+    else:
+        per_route_budget = cand_cfg.get("k")
+        total_candidate_budget = budget_cfg
+    k = int(
+        min(15, len(sentences))
+        if per_route_budget is None
+        else per_route_budget
+    )
+    total_candidate_budget = (
+        int(total_candidate_budget) if total_candidate_budget is not None else None
+    )
     use_cand = bool(cand_cfg.get("use", True))
     mode = (cand_cfg.get("mode", "hard") or "hard").lower()
-    sources = cand_cfg.get("sources", ["score"]) or ["score"]
+    compute_cfg = cfg.get("compute_budget", {}) or {}
+    compute_mode = str(compute_cfg.get("mode", "fixed")).lower()
+    if compute_mode != "fixed":
+        raise ValueError(
+            "only compute_budget.mode='fixed' is implemented; adaptive routing "
+            "must not be claimed before its validation-frozen policy exists"
+        )
+    sources = (
+        compute_cfg.get("enabled_routes")
+        or cand_cfg.get("sources", ["score"])
+        or ["score"]
+    )
     soft_boost = float(cand_cfg.get("soft_boost", 1.05))
 
     g_thresh = float(cfg.get("graph_params", {}).get("threshold", 0.0))
-    cand_idx = build_candidate_union(sentences, base_scores, k, sources, sim_matrix=sim, threshold=g_thresh)
+    candidate_records = (
+        build_candidate_records(
+            sentence_records,
+            base_scores,
+            k,
+            sources,
+            sim_matrix=sim,
+            threshold=g_thresh,
+            total_budget=total_candidate_budget,
+            route_config=cfg.get("routes", {}) or {},
+            coverage_guard=cfg.get("coverage_guard", {}) or {},
+            rrf_constant=int(cand_cfg.get("rrf_constant", 60)),
+        )
+        if use_cand
+        else []
+    )
+    cand_idx = [record["original_index"] for record in candidate_records]
 
     # 5. Apply candidate mode
     if use_cand and cand_idx:
@@ -104,25 +168,20 @@ def summarize_one(doc: Dict, cfg: Dict) -> Dict:
         sub_scores = base_scores
         sub_sim = sim
 
-    # 6. Optimizer dispatch
-    if unit == "words":
-        # Simple word-budget greedy (no optimizer)
-        max_words = int(lc.get("max_words", 400))
-        picked_sub = []
-        current_words = 0
-        sorted_indices = np.argsort(sub_scores)[::-1]
-        for idx in sorted_indices:
-            sentence_text = sub_sentences[idx]
-            word_count = len(sentence_text.split())
-            if current_words + word_count <= max_words:
-                picked_sub.append(idx)
-                current_words += word_count
-    else:
-        method_opt = cfg.get("optimizer", {}).get("method", "greedy").lower()
-        picked_sub = dispatch_optimizer(
-            method_opt, sub_sentences, sub_scores, sub_sim,
-            max_tokens, cfg, alpha, unit, max_sents,
-        )
+    # 6. Optimizer dispatch. A word budget no longer bypasses the configured
+    # selector; it is simply the selector's independent output constraint.
+    picked_sub = dispatch_optimizer(
+        method_opt,
+        sub_sentences,
+        sub_scores,
+        sub_sim,
+        selector_budget,
+        cfg,
+        alpha,
+        unit,
+        max_sents,
+        objective_spec,
+    )
 
     # 7. Map back to original indices
     if use_cand and cand_idx and mode == "hard":
@@ -131,11 +190,38 @@ def summarize_one(doc: Dict, cfg: Dict) -> Dict:
         selected = sorted(picked_sub)
 
     selected.sort()
-    summary = " ".join([sentences[i] for i in selected])
+    summary_sentences = [sentences[i] for i in selected]
+    summary = "\n".join(summary_sentences)
+    selected_sentences = [
+        {
+            **sentence_records[index],
+            "selection_order": order,
+        }
+        for order, index in enumerate(selected)
+    ]
     return {
         "id": doc.get("id"),
         "selected_indices": selected,
+        "selected_sentences": selected_sentences,
+        "summary_sentences": summary_sentences,
         "summary": summary,
+        "candidate_records": candidate_records,
+        "candidate_pool": {
+            "enabled": use_cand,
+            "configured_sources": list(sources) if use_cand else [],
+            "per_route_quota": k if use_cand else None,
+            "total_budget": total_candidate_budget if use_cand else None,
+            "actual_size": len(candidate_records),
+            "coverage_guard": dict(cfg.get("coverage_guard", {}) or {}),
+        },
+        "objective_spec": objective_spec,
+        "output_budget": {
+            "unit": unit,
+            "max_words": max_words if unit == "words" else None,
+            "max_tokens": max_tokens if unit == "tokens" else None,
+            "max_sentences": max_sents,
+        },
+        "task_profile": doc.get("task_profile"),
     }
 
 
@@ -187,12 +273,9 @@ def main():
     import json
     with open(os.path.join(out_dir, "config_used.json"), "w", encoding="utf-8") as f:
         json.dump(cfg, f, ensure_ascii=False, indent=2)
-    # write selection time
-    try:
-        with open(os.path.join(out_dir, "time_select_seconds.txt"), "w", encoding="utf-8") as f:
-            f.write(f"{t1 - t0:.6f}")
-    except Exception:
-        pass
+    # A formal run is incomplete if its timing artifact cannot be written.
+    with open(os.path.join(out_dir, "time_select_seconds.txt"), "w", encoding="utf-8") as f:
+        f.write(f"{t1 - t0:.6f}")
     print(f"Wrote predictions to {preds_path}")
 
 

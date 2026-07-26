@@ -7,7 +7,11 @@ from src.features.tf_isf import sentence_tf_isf_scores, sentence_tf_isf_scores_v
 from src.features.position import position_scores, position_scores_v2
 from src.features.length import length_scores
 from src.features.compose import combine_scores, combine_scores_v2
-from src.features.graph import compute_textrank_scores
+from src.features.graph import (
+    build_sparse_tfidf_knn_graph,
+    compute_sparse_textrank_scores,
+    compute_textrank_scores,
+)
 from src.features.semantic import sentence_centrality_scores, sentence_novelty_scores
 
 
@@ -142,6 +146,28 @@ class TestGraph:
         original = sim.copy()
         compute_textrank_scores(sim, threshold=0.2)
         assert np.array_equal(sim, original)
+
+    def test_dense_dangling_nodes_preserve_probability_mass(self):
+        scores = compute_textrank_scores(np.zeros((3, 3)))
+        assert scores == pytest.approx([1 / 3, 1 / 3, 1 / 3])
+
+    def test_sparse_knn_graph_has_bounded_edges_and_normalized_pagerank(self):
+        sentences = [
+            "alpha beta shared",
+            "alpha gamma shared",
+            "delta epsilon shared",
+            "delta zeta shared",
+            "unrelated tokens only",
+        ]
+        adjacency, facts = build_sparse_tfidf_knn_graph(
+            sentences, n_neighbors=2, min_similarity=0.01
+        )
+        assert facts["stored_edges"] <= 2 * len(sentences) * 2
+        assert adjacency.shape == (len(sentences), len(sentences))
+        assert adjacency.diagonal().sum() == 0.0
+        scores = compute_sparse_textrank_scores(adjacency)
+        assert len(scores) == len(sentences)
+        assert sum(scores) == pytest.approx(1.0)
 
 
 # ---- Semantic ----
