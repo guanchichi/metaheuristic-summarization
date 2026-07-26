@@ -179,8 +179,8 @@ metaheuristic-summarization/
 
 | # | 動作 | 狀態 |
 |---|---|---|
-| 1 | 🔴 寫 `runs/README.md` 標記污染結果 | ⬜ **尚未做 —— 這是最重要也最便宜的一項** |
-| 2 | 對 legacy commit `1b9fe6f` 建 annotated tag | ⬜ 尚未做 |
+| 1 | 🔴 寫 `runs/README.md` 標記污染結果 | ✅ 已完成（2026-07-26；分三類說明失效原因，含 smoke run 規模不足） |
+| 2 | 對 legacy commit `1b9fe6f` 建 annotated tag | ✅ 已完成（`legacy_ict_express`，tag message 列出四項失效原因） |
 | 3 | 疑似死碼（`src/pipeline/build_features.py`）移入 archive | ⬜ 尚未做，檔案仍在 |
 | 4 | 修 `requirements.txt` + pytest | ✅ 已完成 |
 | 5 | `frontend` / `backend` / `experimental` 移到 `_not_in_paper/` | ⬜ 尚未做（README 已標明可略過，影響已降低） |
@@ -188,8 +188,12 @@ metaheuristic-summarization/
 | 7 | 退役過時 `docs/*.md` 至 `docs/_legacy_docs/` | ✅ 已完成（9 份） |
 | 8 | 清除 config 中硬編碼的使用者絕對路徑 | ✅ 已完成（14 個檔案） |
 
-**還沒做的第 1、2 項值得盡快補**：現在 `runs/` 底下的污染結果沒有任何就地警示，
-只有 `docs/research/` 與 `CLAUDE.md` 提到。任何人直接翻 `runs/` 會以為那些 `metrics.csv` 可用。
+**剩下的第 3、5 項優先度低**：`src/pipeline/build_features.py` 是零引用死碼，
+`frontend` / `backend` / `experimental` 已在 README 標明可略過。兩者都不影響研究正確性，
+可等 Phase 1 收尾再處理。
+
+⚠️ **`runs/README.md` 需要隨新結果更新**：它目前列的是 legacy artifact 與兩個 3 筆 smoke run。
+`runs_v2/` 建立後，這份 README 要同步說明新舊分界。
 7. 建立 `runs_v2/` 與新的 `src/` 子模組骨架
 
 > 全部做完約 1 天。**第 1 步不要跳過** —— 那 11 個污染的 run 是目前最危險的東西。
