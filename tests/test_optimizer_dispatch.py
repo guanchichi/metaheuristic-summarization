@@ -1,0 +1,50 @@
+"""Regression tests for optimizer dispatch semantics."""
+
+import numpy as np
+import pytest
+
+import src.pipeline.optimizer_dispatch as dispatch
+
+
+def _call(method, cfg=None, sim=None):
+    return dispatch.dispatch_optimizer(
+        method=method,
+        sub_sentences=["a", "b"],
+        sub_scores=[1.0, 0.5],
+        sub_sim=sim,
+        max_tokens=2,
+        cfg=cfg or {},
+        alpha=0.7,
+        unit="tokens",
+        max_sents=2,
+    )
+
+
+def test_nsga2_forwards_effective_parameters(monkeypatch):
+    captured = {}
+
+    def fake_nsga(*args, **kwargs):
+        captured.update(kwargs)
+        return [0]
+
+    monkeypatch.setattr(dispatch, "nsga2_select", fake_nsga)
+    result = _call(
+        "nsga2",
+        cfg={"optimizer": {"pop_size": 17, "n_gen": 23}, "seed": 41},
+        sim=np.eye(2),
+    )
+
+    assert result == [0]
+    assert captured["pop_size"] == 17
+    assert captured["n_gen"] == 23
+    assert captured["seed"] == 41
+
+
+def test_nsga2_without_similarity_fails_loudly():
+    with pytest.raises(ValueError, match="requires a similarity matrix"):
+        _call("nsga2")
+
+
+def test_unknown_method_fails_loudly():
+    with pytest.raises(ValueError, match="Unknown optimizer method"):
+        _call("typo-that-must-not-run-greedy")
