@@ -32,7 +32,11 @@ def compute_textrank_scores(
         return [1.0]
 
     # Thresholding: Zero out weak edges to reduce noise (Sparse Graph)
+    # NOTE (2026-07 audit fix): this used to modify the caller's array IN PLACE,
+    # silently truncating the similarity matrix that select_sentences.py later
+    # hands to NSGA-II for its coverage/redundancy objectives.  Always copy.
     if threshold > 0:
+        similarity_matrix = similarity_matrix.copy()
         similarity_matrix[similarity_matrix < threshold] = 0.0
 
     # Normalize rows to sum to 1 to create a stochastic matrix M

@@ -137,6 +137,12 @@ class TestGraph:
         assert len(scores) == 5
         assert sum(scores) == pytest.approx(1.0, abs=0.05)
 
+    def test_thresholding_does_not_mutate_input(self):
+        sim = np.array([[1.0, 0.1], [0.1, 1.0]])
+        original = sim.copy()
+        compute_textrank_scores(sim, threshold=0.2)
+        assert np.array_equal(sim, original)
+
 
 # ---- Semantic ----
 

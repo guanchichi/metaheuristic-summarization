@@ -13,19 +13,37 @@ def _ensure_imports():
         ) from e
 
 
-def _sentence_embeddings(
-    sentences: List[str],
+_MODEL_CACHE: dict = {}
+
+
+def load_encoder(
     model_name: str = "bert-base-uncased",
     device: Optional[str] = None,
     token: Optional[str] = None,
 ):
+    """Load (and cache) a tokenizer+model pair.
+
+    AUDIT FIX (2026-07): this construction used to happen inside
+    ``_sentence_embeddings``, i.e. once PER DOCUMENT.  An exploratory CPU
+    timing suggested that loading dominated the old per-article measurement,
+    but the original timing script was not versioned.  The 78% loading share
+    and 1.04x inference-only ratio therefore remain diagnostics that must be
+    reproduced under the locked runtime protocol before publication.
+
+    Timing reported in the paper must therefore separate ONE-OFF model
+    loading from PER-DOCUMENT inference.  Use ``clear_encoder_cache()`` and
+    an explicit warm-up when benchmarking.
+    """
     import torch
     from transformers import AutoTokenizer, AutoModel, AutoConfig
 
-    use_fast = True
-    if isinstance(model_name, str) and ("xlnet" in model_name.lower()):
-        use_fast = False
+    if device is None:
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+    key = (model_name, device)
+    if key in _MODEL_CACHE:
+        return _MODEL_CACHE[key]
 
+    use_fast = not (isinstance(model_name, str) and "xlnet" in model_name.lower())
     tokenizer = AutoTokenizer.from_pretrained(model_name, token=token, use_fast=use_fast)
 
     if isinstance(model_name, str) and ("roberta" in model_name.lower()):
@@ -40,11 +58,27 @@ def _sentence_embeddings(
             model = AutoModel.from_pretrained(model_name, token=token)
     else:
         model = AutoModel.from_pretrained(model_name, token=token)
-    model.eval()
 
-    if device is None:
-        device = "cuda" if torch.cuda.is_available() else "cpu"
+    model.eval()
     model.to(device)
+    _MODEL_CACHE[key] = (tokenizer, model, device)
+    return _MODEL_CACHE[key]
+
+
+def clear_encoder_cache() -> None:
+    """Drop cached encoders (use between benchmark configurations)."""
+    _MODEL_CACHE.clear()
+
+
+def _sentence_embeddings(
+    sentences: List[str],
+    model_name: str = "bert-base-uncased",
+    device: Optional[str] = None,
+    token: Optional[str] = None,
+):
+    import torch
+
+    tokenizer, model, device = load_encoder(model_name, device=device, token=token)
 
     embs: List[torch.Tensor] = []
     batch_size = 16
