@@ -6,6 +6,52 @@ All notable changes to the `metaheuristic-summarization` project will be documen
 > invalidated.** They are kept for history, with corrections noted inline.
 > See `docs/research/CODE_AUDIT_IEEE_Access.md`.
 
+## [v0.6.0] - 2026-07-26 (Phase 1 research contracts)
+
+Establishes the contracts the Phase 1 validation pilot depends on. Nothing here
+is a research result: no configuration has been evaluated against a baseline yet.
+
+### Added
+- `src/data/schemas.py`, `preprocess_multinews.py`, `validate_dataset.py` —
+  canonical DocumentExample with source-document boundaries, per-document
+  sentence positions, deterministic NLTK Punkt segmentation, char-span mapping,
+  pinned dataset revision, and a health/fingerprint report. The old flat
+  Multi-News JSONL had lost `|||||` boundaries and cannot support
+  cross-document objectives.
+- `src/objectives/factory.py` — objectives are created only when the declared
+  task profile makes them meaningful. Single-sentence tasks disable redundancy
+  and subset search; profiled multi-sentence tasks reject raw-sum salience,
+  which rewarded cardinality; declared-but-unimplemented document-group
+  coverage raises rather than being reported as if it existed.
+- `src/eval/protocol.py` — evaluation runs only under an explicitly named
+  protocol. `scitldr_official` fails closed until a conformance-tested wrapper
+  exists, so generic rouge-score output cannot be labelled official.
+- `configs/phase1_mvp_multinews.yaml` — validation-only MVP isolating lexical +
+  semantic candidate utility with a deterministic selector. Graph and NSGA-II
+  are deliberately excluded from the first gate.
+- GitHub Actions unit-test workflow with a light `requirements-ci.txt`.
+
+### Changed
+- Candidate generation: every enabled route now scores the complete input before
+  any quota applies. `route_top_k` is proposal depth, `min_per_route` is a
+  binding reservation, and RRF may fill the remaining cap only from the proposal
+  union or explicit coverage guards. An infeasible cap raises; an unreachable
+  cap is reported as `underfilled_by` rather than padded from the document.
+- Selector salience is explicit and auditable (`base_score`, `membership_only`,
+  `rrf_fusion`, `<route>_percentile`). The MVP uses `rrf_fusion`, so the
+  semantic route influences ranking and not only pool membership; the other
+  sources remain as ablation controls.
+- The graph candidate route defaults to a bounded sparse TF-IDF kNN graph;
+  dense `N x N` requires an explicit `dense_legacy` opt-in.
+- Predictions no longer carry gold text; evaluation aligns by id via `--gold`.
+- `length_control.unit: words` goes through the configured selector instead of a
+  separate greedy path.
+
+### Notes
+- Route or feature failure fails the run. No zero-filling, no silent fallback.
+- Tests: 108 pass. Still open: no baselines exist (Gate 2), so the central
+  question — whether any configuration beats Lead — remains unanswered.
+
 ## [v0.5.0] - 2026-07-26 (Correctness refactor)
 ### Fixed
 - **ROUGE protocol**: `src/eval/rouge.py` now uses `rougeLsum` for multi-sentence

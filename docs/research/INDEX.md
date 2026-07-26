@@ -17,6 +17,22 @@
 
 → 詳見 `ACTION_PLAN.md` 的 Phase −1。**在接受這兩件事之前，不要開始改論文。**
 
+### 目前進度速覽（2026-07-26）
+
+| | 狀態 |
+|---|---|
+| Phase 1 程式契約 | 🟡 **大部分完成** —— route 獨立排名、provenance 進 selector、objective factory、canonical schema、evaluator 邊界；見 `ACTION_PLAN.md` Phase 1 |
+| 測試 | ✅ 108 項全過；CI 已接 GitHub Actions |
+| **baseline** | 🔴 **完全沒做** —— Gate 2 的全部內容。沒有它，上面那條 F-0 永遠無法回答 |
+| 新 pipeline 的實測結果 | 🔴 **零** —— 還沒跑過任何 validation 評估 |
+| 資料 | 🟡 canonical 產生器已實作，尚未產出完整三個 split 與 manifest |
+
+> ⚠️ **「契約完成」不等於「方法有效」。** 目前沒有任何一個新配置被評估過。
+> 每個 route 的刪除條件（`ARCHITECTURE.md` §5.3／§5.4／§7.3）都仍然有效。
+>
+> 各項稽核發現的 legacy／新 pipeline 現況對照見
+> `CODE_AUDIT_IEEE_Access.md` **§0.0 狀態表**。
+
 ---
 
 ## 文件導覽

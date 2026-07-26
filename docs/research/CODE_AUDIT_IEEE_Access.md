@@ -17,7 +17,46 @@
 
 ---
 
+## 0.0 ⚠️ 各項發現的現況（讀本文件前先看這張表）
+
+> **本文件的 F-1 ~ F-13 描述的是 commit `1b9fe6f`（legacy）的行為，以現在式書寫。**
+> 其中多項在 Phase 1 重構後**已於新 pipeline 修好**，但 legacy 程式路徑仍保持原狀以便重現舊 artifact。
+> 沒有這張表，讀者會把已修好的缺陷當成待辦事項。
+>
+> 「新 pipeline」= `configs/phase1_mvp_multinews.yaml` 走的 canonical 路徑。
+> 「legacy」= `configs/1_*.yaml` / `2_*.yaml` 與 `fast_fused.py`，**刻意不修**。
+
+| # | 發現 | legacy | 新 pipeline | 修在哪 / 為何未修 |
+|---|---|---|---|---|
+| **F-0** | 系統未贏 Lead | 🔴 成立 | ⏳ **未量測** | 待 MVP 跑完 validation 才知道。**這是 go/no-go 的核心,尚未回答** |
+| F-1 | 論文 "oracle" 不是 oracle | 🔴 成立 | ✅ 已可正確計算 | `src/eval/oracle.py`；舊稿 0.136 須撤回。SciTLDR official oracle 為條件式 |
+| F-2 | ROUGE-L 應為 Lsum | 🔴 成立 | ✅ 已修 | `src/eval/rouge.py`；published-protocol parity 仍待驗證 |
+| F-3 | Stage 2 沒有 PLM | 🔴 成立 | ✅ **已修** | 新增 semantic route + `selector.salience_source: rrf_fusion`。`fast_fused.py` 保持原狀 |
+| F-4 | PLM 每篇重載模型 | 🔴 成立 | ✅ 程式已修 | `load_encoder()` 快取。**但正式計時數字仍須依鎖定 protocol 重測** |
+| F-5 | 相似度矩陣就地竄改 | 🔴 成立 | ✅ 已修 + regression test | `src/features/graph.py` |
+| F-6 | `pop_size`/`n_gen`/`seed` 未接線 | 🔴 成立 | ✅ 已修 | `optimizer_dispatch.py` |
+| F-7 | salience 用總和 → 基數偏誤 | 🔴 成立 | ✅ 已禁止 | `objectives/factory.py` 拒絕 profiled config 用 raw sum；legacy 保留 sum |
+| F-8 | SciTLDR 多重 reference 被串接 | 🔴 成立 | ✅ 已修 | `preprocess_scitldr.py` 改存 `references: list` |
+| **F-9** | **repo 無任何 baseline 實作** | 🔴 成立 | 🔴 **仍然成立** | **未做。Phase 2 / Gate 2 的全部內容** |
+| F-10 | 圖模組 τ 套用不一致 | 🔴 成立 | ✅ 已修 | τ 已傳入 `feature_builder.py` 與 graph route |
+| **F-11** | `centrality` 與 `novelty` 完全反相關 | 🔴 成立 | 🔴 **仍然成立** | **未修**。新 MVP 兩者權重皆 0 所以不觸發,但退化仍存在 |
+| F-12 | 分句用純正則 | 🔴 成立 | 🟡 部分修 | Multi-News canonical 已改 NLTK Punkt；**legacy `preprocess.py` 未動,GovReport/CNN-DM 待做** |
+| F-13 | 其他（requirements 重複、pytest 缺、靜默 fallback…） | 🔴 成立 | ✅ 多數已修 | requirements 去重 + pytest、fallback 移除；**GRASP 目標不一致仍未修** |
+
+### 目前真正還開著的（不要被上面的 ✅ 誤導）
+
+1. 🔴 **F-0 尚未在新 pipeline 上回答** —— 修好一堆東西不等於贏過 Lead
+2. 🔴 **F-9 baseline 完全沒做** —— 沒有它,F-0 永遠無法回答
+3. 🔴 **F-11 centrality/novelty 退化** —— 若日後啟用這兩個特徵會出問題
+4. 🟡 **F-12 legacy 分句、GovReport/CNN-DM 分句規則**
+5. 🟡 **F-4 的正式計時數字**、**F-2 的 published-protocol parity**
+6. 🟡 **F-13 的 GRASP 目標不一致**（建構階段與局部搜尋用不同目標）
+
+---
+
 ## 0. 執行摘要（先看這裡）
+
+> ⚠️ 本節與以下所有 F 條目描述 **legacy** 行為。現況請對照上方 §0.0 狀態表。
 
 我把四位審稿人的技術指控逐條拿去對程式碼驗證。結論分成三類：
 

@@ -136,9 +136,11 @@ scikit-learn>=1.2       # 第 12 行
 scikit-learn>=1.3.0     # 第 27 行  ← 重複；實際有效下限為 1.3.0
 ```
 
-- [ ] 合併重複項，鎖定單一版本
-- [ ] 補上 `pytest`（目前沒裝，`tests/` 跑不起來）
-- [ ] 補上 `bert-score`、`nltk`（Phase 1 會用到）
+- [x] 合併重複項，鎖定單一版本（2026-07-26：`pymoo` / `scikit-learn` 各只剩一條）
+- [x] 補上 `pytest`（已在 `requirements.txt`；`tests/` 目前 108 項全過）
+- [x] 拆出 `requirements-demo.txt`（fastapi / flask / uvicorn）與 `requirements-ci.txt`（輕量 CI）
+- [x] 補上 `nltk`（canonical Multi-News 分句已使用 Punkt）
+- [ ] 補上 `bert-score`（Phase 5 語意指標才需要）
 - [ ] 產生 lockfile（`pip freeze > requirements.lock.txt`）
 
 ### 其他
@@ -171,14 +173,23 @@ metaheuristic-summarization/
 
 ---
 
-## 7. 執行順序
+## 7. 執行順序與目前進度
 
-1. 🔴 先寫 `runs/README.md` 標記污染（5 分鐘，但最重要）
-2. 對已核對的 legacy commit `1b9fe6f` 建 annotated tag；不要把目前 dirty worktree 當成 legacy snapshot
-3. 將疑似死碼移入 archive，完成入口／重現檢查後再決定刪除
-4. 修 `requirements.txt` + 裝 pytest
-5. 移動 `frontend` / `backend` / `experimental` 到 `_not_in_paper/`
-6. 壓縮歸檔 `_legacy_archive` / `_archive_2026_01_15` / `scripts/_archive`
+> ✅ 已完成 = 2026-07-26 實際驗證過；⬜ = 尚未做。
+
+| # | 動作 | 狀態 |
+|---|---|---|
+| 1 | 🔴 寫 `runs/README.md` 標記污染結果 | ⬜ **尚未做 —— 這是最重要也最便宜的一項** |
+| 2 | 對 legacy commit `1b9fe6f` 建 annotated tag | ⬜ 尚未做 |
+| 3 | 疑似死碼（`src/pipeline/build_features.py`）移入 archive | ⬜ 尚未做，檔案仍在 |
+| 4 | 修 `requirements.txt` + pytest | ✅ 已完成 |
+| 5 | `frontend` / `backend` / `experimental` 移到 `_not_in_paper/` | ⬜ 尚未做（README 已標明可略過，影響已降低） |
+| 6 | 歸檔 `_legacy_archive` / `_archive_2026_01_15` / `scripts/_archive` | ✅ **已由 `.gitignore` 的 `**/_archive*/`、`**/_legacy_*/` 排除於版本庫外**，本機檔案保留 |
+| 7 | 退役過時 `docs/*.md` 至 `docs/_legacy_docs/` | ✅ 已完成（9 份） |
+| 8 | 清除 config 中硬編碼的使用者絕對路徑 | ✅ 已完成（14 個檔案） |
+
+**還沒做的第 1、2 項值得盡快補**：現在 `runs/` 底下的污染結果沒有任何就地警示，
+只有 `docs/research/` 與 `CLAUDE.md` 提到。任何人直接翻 `runs/` 會以為那些 `metrics.csv` 可用。
 7. 建立 `runs_v2/` 與新的 `src/` 子模組骨架
 
 > 全部做完約 1 天。**第 1 步不要跳過** —— 那 11 個污染的 run 是目前最危險的東西。

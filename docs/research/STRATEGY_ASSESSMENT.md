@@ -149,26 +149,44 @@ SciTLDR 的舊勝負尚未成立，而且它也不適合當主戰場：
 
 ### 3.1 必須修的三件事（依重要性）
 
-**① 打破候選池的 lead bias —— 這是最關鍵的一刀**
+> ✅ **2026-07-26 更新：這三項的「程式契約」都已實作完成**，見 `ACTION_PLAN.md` Phase 1c/1d
+> 與 `CODE_AUDIT_IEEE_Access.md` §0.0 狀態表。
+> **但「實作完成」不等於「有效」** —— 三項的效益都還沒量測，仍須通過 validation pilot。
+> 以下保留原始診斷與驗收條件，狀態另以標籤標示。
 
-目前：候選池由 lead-biased 分數單獨決定 → 後續 route 無法找回已被排除的句子。
+**① 打破候選池的 lead bias —— 這是最關鍵的一刀**　【✅ 契約已實作／⏳ 效益未驗證】
 
-要改成：
-- 候選池**必須多樣化**：lexical、semantic、sparse graph/structure 各自獨立取 top-K 再聯集，而不是只用一個混合分數
-- 三軌**必須在完整輸入上獨立排名**，不能先被共同候選池截斷（研究主計畫 P0-03）
-- 加入 position／document／section strata coverage guard；它們不是第四個語意 route
-- **驗收指標**：候選池對 validated oracle／greedy-reference 句子的 **recall@K**。22.8% 只是 legacy exploratory 值，先版本化重跑再訂提升門檻
+原診斷：候選池由 lead-biased 分數單獨決定 → 後續 route 無法找回已被排除的句子。
 
-> 這是我認為最值得投入的單一改動。它直接針對已診斷出的病因。
+已實作：
+- ✅ lexical / semantic / sparse graph 各自**在完整輸入上排名**，不再被共同候選池預先截斷
+- ✅ `route_top_k` 只定義提案深度、`min_per_route` 是明確保留額、RRF 只能在 proposal union 與 guard 內填 total cap
+- ✅ position / document / section strata coverage guard 可獨立設定，並標為 `guard:*` 而非第四個語意 route
+- ✅ 不可行的保留額組合會 fail loud，不會默默犧牲某個 route
 
-**② 重新設計 position 特徵**
+⏳ **仍未完成的驗收**：候選池對 validated oracle／greedy-reference 的 **recall@K**。
+22.8% 是 legacy exploratory 值；新 pipeline 的數字**還沒量過**，提升門檻也還沒訂。
 
-目前 `position` 是單調遞減的 lead prior；legacy greedy-reference 的位置中位數探索值是 0.46，提示中後段可能被低估，但不是正式結論。
-建議：position 先降為獨立、可消融的弱 prior 或 strata guard，不再控制唯一候選入口；是否需要非單調或 learned prior，必須等 validation pilot，不能先增加訓練複雜度。
+> 這仍是最關鍵的一刀 —— 但現在的問題已從「有沒有做」變成「做了有沒有用」。
 
-**③ 真的把語意訊號接上（F-3／研究主計畫 P0-04）**
+**② 重新設計 position 特徵**　【🟡 部分處理】
 
-目前 Stage 2 的「PLM 語意」其實是 TF-IDF。應把真正的 sentence encoder 實作為完整輸入上的獨立候選 route，但不能假設接上後必然改善；若 unique candidate recall、quality delta 或 quality-cost 都沒有增量，semantic route 必須刪除。
+原診斷：`position` 是單調遞減的 lead prior；legacy greedy-reference 的位置中位數探索值是 0.46。
+
+- ✅ position 已不再控制唯一候選入口，可作為獨立的 coverage guard
+- ⬜ **MVP config 目前把 `position` 權重設為 0，等於迴避而非解決**。
+  是否需要非單調或 learned prior，仍待 validation pilot 決定
+
+**③ 真的把語意訊號接上（F-3／研究主計畫 P0-04）**　【✅ 已接上／⏳ 增量未驗證】
+
+原診斷：Stage 2 的「PLM 語意」其實是 TF-IDF。
+
+- ✅ semantic route 已是完整輸入上的獨立候選 route，使用 pinned sentence-encoder revision
+- ✅ **selector 真的收到 provenance**：`selector.salience_source: rrf_fusion`
+  （實測：改變 semantic 分數會改變最終選句；用 `base_score` 則不會）
+- ✅ `base_score` / `membership_only` 保留為可消融對照組
+- ⏳ **仍未驗證**：unique candidate recall、quality delta、quality-cost 是否有增量。
+  **若三者都沒有,semantic route 必須刪除** —— 這個刪除條件仍然有效
 
 ### 3.2 修好之後能到哪裡？—— 誠實的期望值
 
