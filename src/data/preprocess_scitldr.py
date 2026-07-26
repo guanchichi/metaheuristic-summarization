@@ -1,24 +1,32 @@
 import argparse
 import os
-from typing import List, Dict
+from typing import Dict
+
 from datasets import load_dataset
+
+from src.data.schemas import build_document_example
 from src.utils.io import ensure_dir, write_jsonl
 
-def process_example(ex: Dict) -> Dict:
-    # scitldr structure:
-    # source: list of strings (sentences)
-    # source_labels: list of ints
-    # rouge_scores: list of floats
-    # paper_id: string
-    # target: list of strings (summaries)
-    
-    return {
-        "id": ex["paper_id"],
-        "sentences": ex["source"],
-        "highlights": " ".join(ex["target"]), # Join target sentences into a single string for reference
-        "rouge_scores": ex["rouge_scores"],
-        "source_labels": ex["source_labels"]
-    }
+def process_example(ex: Dict, split: str = "test") -> Dict:
+    """Convert SciTLDR AIC to the canonical single-document contract.
+
+    ``target`` contains alternative human summaries.  They must remain
+    separate references; concatenating them changes both the task and ROUGE.
+    """
+
+    return build_document_example(
+        example_id=ex["paper_id"],
+        split=split,
+        documents=[ex["source"]],
+        references=ex["target"],
+        input_mode="single_document",
+        output_mode="single_sentence",
+        dataset_name="SciTLDR-AIC",
+        metadata={
+            "source_labels": ex.get("source_labels", []),
+            "rouge_scores": ex.get("rouge_scores", []),
+        },
+    )
 
 def main():
     ap = argparse.ArgumentParser()
@@ -34,7 +42,7 @@ def main():
 
     rows = []
     for ex in ds:
-        rows.append(process_example(ex))
+        rows.append(process_example(ex, split=args.split))
     
     write_jsonl(out_path, rows)
     print(f"Wrote {len(rows)} items to {out_path}")

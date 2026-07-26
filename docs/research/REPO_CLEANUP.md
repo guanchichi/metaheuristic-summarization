@@ -143,7 +143,7 @@ scikit-learn>=1.3.0     # 第 27 行  ← 重複；實際有效下限為 1.3.0
 
 ### 其他
 
-- [ ] `src/data/preprocess_scitldr.py:19` —— multi-reference 串接（Phase 1b 修）
+- [x] `src/data/preprocess_scitldr.py` —— multi-reference 已改為 canonical list（2026-07-26）
 - [ ] `_minmax_norm`（`fast_fused.py`）常數輸入回傳 0.0，`_minmax_normalize`（`compose.py`）回傳 0.5 —— 行為不一致
 - [ ] `src/features/semantic.py` 的 `centrality` 與 `novelty` 數學上完全反相關（`centrality_norm = 1 - novelty_norm`），
       同時給獨立權重是退化的；且 `centrality` 錯誤地含對角線自身相似度

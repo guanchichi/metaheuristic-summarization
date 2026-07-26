@@ -22,9 +22,10 @@ from src.utils.io import (
 )
 from src.representations.sent_vectors import SentenceVectors
 from src.representations.similarity import cosine_similarity_matrix
+from src.data.schemas import flatten_sentence_texts
 
 from src.pipeline.feature_builder import build_base_scores
-from src.pipeline.candidate_builder import build_candidate_union, greedy_oracle_indices
+from src.pipeline.candidate_builder import build_candidate_union
 from src.pipeline.optimizer_dispatch import dispatch_optimizer
 
 
@@ -32,9 +33,29 @@ from src.pipeline.optimizer_dispatch import dispatch_optimizer
 #  Core per-document summarisation                                     #
 # ------------------------------------------------------------------ #
 
+def validate_requested_split(doc: Dict, requested_split: str) -> None:
+    """Prevent a canonical row from being run under the wrong split label."""
+
+    if "schema_version" in doc and doc.get("split") != requested_split:
+        raise ValueError(
+            f"canonical row {doc.get('id')!r} belongs to split {doc.get('split')!r}, "
+            f"but --split is {requested_split!r}"
+        )
+
+
 def summarize_one(doc: Dict, cfg: Dict) -> Dict:
-    sentences: List[str] = doc.get("sentences", [])
-    highlights: str = doc.get("highlights", "")
+    sentences: List[str] = flatten_sentence_texts(doc)
+
+    cand_cfg = cfg.get("candidates", {})
+    # A gold-reference-dependent candidate size is an oracle diagnostic, not
+    # a deployable inference rule.  Refuse old configs before doing any model
+    # or feature work.
+    if cand_cfg.get("recall_target") is not None:
+        raise ValueError(
+            "candidates.recall_target is forbidden in the production selection "
+            "pipeline because it requires gold references; run oracle/candidate "
+            "recall analysis as a separate diagnostic"
+        )
 
     # 1. Similarity matrix (needed by graph features, candidates, NSGA-II)
     rep_cfg = cfg.get("representations", {})
@@ -57,7 +78,6 @@ def summarize_one(doc: Dict, cfg: Dict) -> Dict:
     alpha = float(cfg.get("redundancy", {}).get("lambda", 0.7))
 
     # 4. Candidate pool
-    cand_cfg = cfg.get("candidates", {})
     k = int(cand_cfg.get("k", min(15, len(sentences))))
     use_cand = bool(cand_cfg.get("use", True))
     mode = (cand_cfg.get("mode", "hard") or "hard").lower()
@@ -66,21 +86,6 @@ def summarize_one(doc: Dict, cfg: Dict) -> Dict:
 
     g_thresh = float(cfg.get("graph_params", {}).get("threshold", 0.0))
     cand_idx = build_candidate_union(sentences, base_scores, k, sources, sim_matrix=sim, threshold=g_thresh)
-
-    # Optional dynamic k to reach recall target
-    recall_target = cand_cfg.get("recall_target", None)
-    if recall_target is not None and isinstance(recall_target, (int, float)) and 0 < recall_target <= 1:
-        oracle = greedy_oracle_indices(sentences, doc.get("highlights", ""), int(cfg.get("length_control", {}).get("max_tokens", 100)))
-        if oracle:
-            import math as _m
-            used_k = max(1, len(cand_idx))
-            while used_k < len(sentences):
-                inter = len(set(cand_idx) & set(oracle))
-                rec = inter / max(1, len(oracle))
-                if rec >= float(recall_target) - 1e-12:
-                    break
-                used_k = min(len(sentences), max(used_k + 1, int(_m.ceil(used_k * 1.5))))
-                cand_idx = build_candidate_union(sentences, base_scores, used_k, sources, sim_matrix=sim)
 
     # 5. Apply candidate mode
     if use_cand and cand_idx:
@@ -131,7 +136,6 @@ def summarize_one(doc: Dict, cfg: Dict) -> Dict:
         "id": doc.get("id"),
         "selected_indices": selected,
         "summary": summary,
-        "reference": highlights,
     }
 
 
@@ -174,6 +178,7 @@ def main():
     docs = list(read_jsonl(args.input))
     rows = []
     for doc in tqdm(docs, desc="Summarizing", total=len(docs)):
+        validate_requested_split(doc, args.split)
         rows.append(summarize_one(doc, cfg))
     write_jsonl(preds_path, rows)
     t1 = time.perf_counter()

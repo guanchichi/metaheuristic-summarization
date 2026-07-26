@@ -112,7 +112,7 @@ def oracle_scores(
     preds, refs = [], []
     for d in docs:
         sents = d.get("sentences", [])
-        ref = d.get("highlights", "")
+        ref = d.get("references", d.get("highlights", d.get("reference", "")))
         idx = greedy_oracle_summary(
             sents, ref, max_tokens=max_tokens, max_sentences=max_sentences,
             metric=target_metric, scorer=sel_scorer,

@@ -111,7 +111,7 @@ greedy reference 不是 official oracle、未做 paired test。新 validation pi
 
 - 🚫 **不要用 test set 調參**。validation 調參 → freeze config → test 只跑一次
 - CNN/DM 官方 test 是 **11490**；13368 是 validation
-- SciTLDR 的 `target` 是**多個替代 reference**，不可串接（`preprocess_scitldr.py:19` 仍是錯的，待修）
+- SciTLDR 的 `target` 是**多個替代 reference**，`preprocess_scitldr.py` 已改為 canonical `references: list[str]`，不可再串接
 
 ---
 
@@ -134,7 +134,7 @@ greedy reference 不是 official oracle、未做 paired test。新 validation pi
 按目前多句內部協定重算某個 run（不代表已對齊所有 published evaluator）：
 
 ```bash
-python -m src.pipeline.evaluate --pred runs/<run>/predictions.jsonl --out runs/<run>/metrics_fixed.csv
+python -m src.pipeline.evaluate --pred runs/<run>/predictions.jsonl --gold data/processed/<dataset>_<split>.jsonl --out runs/<run>/metrics_fixed.csv --protocol multisentence_lsum
 ```
 
 算 greedy oracle reference：

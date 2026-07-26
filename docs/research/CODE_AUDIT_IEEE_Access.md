@@ -657,7 +657,7 @@ python -m src.eval.oracle --input data/processed/multi_news_test.jsonl --max_wor
 **按目前多句內部協定重算已有 run（不等同 published-protocol parity）**
 
 ```bash
-python -m src.pipeline.evaluate --pred runs/full_benchmark_result/final_summary/predictions.jsonl --out runs/full_benchmark_result/metrics_fixed.csv
+python -m src.pipeline.evaluate --pred runs/full_benchmark_result/final_summary/predictions.jsonl --gold data/processed/multi_news_test.jsonl --out runs/full_benchmark_result/metrics_fixed.csv --protocol multisentence_lsum
 ```
 
 > ⚠️ **修改後必做**：`optimizer_dispatch.py` 現在會 fail loud。請重跑一次既有的主要實驗設定，確認**沒有任何一組實驗其實是靠 greedy fallback 跑出來的**（見 F-13f）。若有，那組的論文數字必須作廢重跑。

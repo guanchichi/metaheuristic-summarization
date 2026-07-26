@@ -88,19 +88,20 @@
 - [~] `src/features/graph.py` → `.copy()` smoke test 通過；待正式 regression test suite
 - [~] `src/models/extractive/encoder_rank.py` → 模型快取 patch 已加；待多文件、CPU/GPU、cache-clear 與效能測試
 - [~] `src/pipeline/optimizer_dispatch.py` → 參數接線與 no-fallback smoke test 通過；待 pytest regression
+- [x] `src/pipeline/select_sentences.py`／`evaluate.py` → production prediction 不再攜帶 gold；評估另以 `--gold` 按 ID 嚴格對齊，並禁止 `candidates.recall_target`
 - [x] `scripts/audit/` → 稽核診斷腳本已版本化（`lead_vs_system` / `selection_diagnostics` / `dataset_headroom` / `plm_timing`），
       由版本化位置重跑確認 F-0 與 61.7%／22.8% 數字完全一致；用法見 `scripts/audit/README.md`
       **仍是 diagnostic**：跑在 legacy artifact、內部 Lsum 協定、抽樣、未做 paired test
 
 **1a 的共同驗收條件**（全部完成才能把上面的 `[~]` 改成 `[x]`）：
 
-- [ ] `pip install pytest` 並讓 `tests/` 能跑
+- [x] `pip install pytest` 並讓 `tests/` 能跑（2026-07-26：65 passed）
 - [ ] 每個 patch 都有對應的 regression test（見 1e）
 - [ ] SciTLDR official single-sentence oracle 重現 R1 ≈ 52.4
 
 ### 1b. 資料層
 
-- [ ] 🔴 `preprocess_scitldr.py`：**停止串接 multi-reference**，`references` 存成 list
+- [x] 🔴 `preprocess_scitldr.py`：**停止串接 multi-reference**，`references` 存成 list（2026-07-26；含 canonical schema 與 golden test）
 - [ ] 分句改用 NLTK punkt 或 spaCy
       （現況：正則分句造成 358/37349 個「句子」超過 80 字，最長 855 字）
 - [ ] Multi-News 正確處理 `|||||` 分隔符與換行雜訊；修編碼（少數 U+FFFD）

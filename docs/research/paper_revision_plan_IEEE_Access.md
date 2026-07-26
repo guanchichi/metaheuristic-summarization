@@ -158,7 +158,8 @@
 
 程式另有第二個問題：
 
-- preprocess_scitldr.py 把 target list 直接用空白串成一個 reference。
+- preprocess_scitldr.py 原先把 target list 串成單一 reference；已於 2026-07-26 修正為 canonical `references: list[str]`，並加入防回歸測試。SciTLDR 官方 evaluator wrapper 尚未完成，因此程式會拒絕把一般 ROUGE 誤標成 `scitldr_official`。
+- production inference 已不再輸出或使用 gold reference；evaluation 必須另給 `--gold`，以唯一 ID 完整對齊，缺列、多列或不一致都直接失敗。舊的 `candidates.recall_target` 因依賴 gold 決定 K，已禁止在 production selector 使用。
 - SciTLDR 的 target entries 是多個 reference／annotation，不應視為同一篇長摘要。
 - legacy scitldr_test.jsonl 共 618 篇；直接取每篇既存 rouge_scores 的最大值後再平均為 0.4311。這仍不是 official evaluator 的 oracle，只能證明資料中本來有 sentence-level candidate signal，而稿件另算的 full-source 0.1357 不能稱為 oracle。
 

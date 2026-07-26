@@ -74,7 +74,7 @@ def build_candidate_union(
 def greedy_oracle_indices(
     sentences: List[str], reference: str, max_tokens: int
 ) -> List[int]:
-    """Greedy oracle by ROUGE-1 F gain (used for recall_target of candidates)."""
+    """Greedy reference oracle for offline diagnostic analysis only."""
     try:
         from rouge_score import rouge_scorer
     except Exception:

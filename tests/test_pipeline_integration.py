@@ -2,7 +2,8 @@
 
 import pytest
 
-from src.pipeline.select_sentences import summarize_one
+from src.data.schemas import build_document_example
+from src.pipeline.select_sentences import summarize_one, validate_requested_split
 
 
 @pytest.fixture
@@ -111,3 +112,40 @@ class TestPipelineEdgeCases:
         doc = {"id": "single", "sentences": ["Hello world."], "highlights": "Hello."}
         result = summarize_one(doc, base_config)
         assert result["selected_indices"] == [0]
+
+    def test_canonical_document_is_supported(self, base_config):
+        doc = build_document_example(
+            example_id="canonical",
+            split="test",
+            documents=[["Hello world.", "A second sentence."]],
+            references=["First reference.", "Second reference."],
+            input_mode="single_document",
+            output_mode="single_sentence",
+        )
+        result = summarize_one(doc, base_config)
+        assert result["id"] == "canonical"
+        assert "references" not in result
+
+    def test_gold_reference_cannot_change_selection(self, sample_doc, base_config):
+        first = dict(sample_doc, highlights="Completely unrelated gold text.")
+        second = dict(sample_doc, highlights="Machine learning AI deep learning.")
+        assert summarize_one(first, base_config)["selected_indices"] == summarize_one(
+            second, base_config
+        )["selected_indices"]
+
+    def test_reference_dependent_candidate_sizing_is_forbidden(self, sample_doc, base_config):
+        base_config["candidates"] = {"use": True, "recall_target": 0.9}
+        with pytest.raises(ValueError, match="gold references"):
+            summarize_one(sample_doc, base_config)
+
+    def test_canonical_split_mismatch_is_forbidden(self):
+        doc = build_document_example(
+            example_id="validation-row",
+            split="validation",
+            documents=[["One sentence."]],
+            references=["Reference."],
+            input_mode="single_document",
+            output_mode="single_sentence",
+        )
+        with pytest.raises(ValueError, match="belongs to split 'validation'"):
+            validate_requested_split(doc, "test")

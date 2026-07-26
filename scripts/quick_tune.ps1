@@ -73,7 +73,9 @@ foreach ($t in $Tests) {
         Write-Host "  > Evaluating..."
         python -m src.pipeline.evaluate `
             --pred $PredFile `
-            --out "$RunDir/$Name/metrics.csv"
+            --gold $Dataset `
+            --out "$RunDir/$Name/metrics.csv" `
+            --protocol multisentence_lsum
             
         $Res = Get-Content "$RunDir/$Name/metrics.csv" | Select-Object -Skip 1 | Select-Object -First 3
         Write-Host "  > Result: $Res" -ForegroundColor Green

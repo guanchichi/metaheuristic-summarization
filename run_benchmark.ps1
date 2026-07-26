@@ -46,7 +46,7 @@ if ($LASTEXITCODE -ne 0) { Write-Error "Stage 2 failed"; exit 1 }
 
 # 6. Evaluate
 Write-Host "`n[6/6] Evaluating ROUGE Scores..."
-python -m src.pipeline.evaluate --pred "$RunDir/final_summary/predictions.jsonl" --out "$RunDir/metrics.csv"
+python -m src.pipeline.evaluate --pred "$RunDir/final_summary/predictions.jsonl" --gold $Dataset --out "$RunDir/metrics.csv" --protocol multisentence_lsum
 
 Write-Host "`n=========================================="
 Write-Host "Benchmark Completed Successfully!"

@@ -100,7 +100,7 @@ cd metaheuristic-summarization
 按目前多句內部協定重算某個 run（ROUGE-Lsum；不可自動視為 published-protocol parity）：
 
 ```bash
-.venv/Scripts/python.exe -m src.pipeline.evaluate --pred runs/<run>/predictions.jsonl --out runs/<run>/metrics_fixed.csv
+.venv/Scripts/python.exe -m src.pipeline.evaluate --pred runs/<run>/predictions.jsonl --gold data/processed/<dataset>_<split>.jsonl --out runs/<run>/metrics_fixed.csv --protocol multisentence_lsum
 ```
 
 計算 greedy oracle reference（不是 exact upper bound；目前的 `max_words` 是空白切詞）：

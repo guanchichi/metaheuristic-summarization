@@ -71,10 +71,10 @@ def score_single(
     """Score one prediction against one *or several* references.
 
     Multi-reference datasets (e.g. SciTLDR-AIC, whose ``target`` field holds
-    alternative TLDRs) must not concatenate references.  SciTLDR's official
-    script selects the reference with maximum ROUGE-1, then reports R1/R2/RL
-    from that same reference.  Taking an independent maximum for every metric
-    is a different, optimistic protocol and is intentionally not used here.
+    alternative TLDRs) must not concatenate references.  This local primitive
+    selects one reference by ROUGE-1 and reports every requested metric from
+    it; it is intentionally not exposed as the official SciTLDR protocol until
+    conformance against the pinned official evaluator has been demonstrated.
     """
     if isinstance(refs, str):
         refs = [refs]

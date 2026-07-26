@@ -122,7 +122,7 @@ python -m src.pipeline.select_sentences --config configs/1_Base_NSGA2.yaml \
 評估（ROUGE-1/2/Lsum）：
 
 ```bash
-python -m src.pipeline.evaluate --pred runs/<run>/predictions.jsonl --out runs/<run>/metrics.csv
+python -m src.pipeline.evaluate --pred runs/<run>/predictions.jsonl --gold data/processed/<dataset>_<split>.jsonl --out runs/<run>/metrics.csv --protocol multisentence_lsum
 ```
 
 Greedy oracle reference（**不是** exact upper bound）：
@@ -153,7 +153,7 @@ python -m src.eval.oracle --input data/processed/multi_news_test.jsonl --max_wor
 投稿前必須處理，詳見團隊內部重構計畫：
 
 - `src/data/preprocess.py` 用正則分句，未處理縮寫與小數，會產生過長的偽句子
-- `src/data/preprocess_scitldr.py` 把 SciTLDR 的多個 reference 串接成單一字串（應保留為 list）
+- `src/data/preprocess_scitldr.py` 已保留 SciTLDR 多個替代 reference；`scitldr_official` 評估在官方 wrapper 通過一致性測試前會拒絕執行
 - `src/features/semantic.py` 的 `centrality` 與 `novelty` 數學上完全反相關，同時加權是退化的
 - `graph_params.threshold` 只作用於候選池，未套用到 graph 特徵分數
 - NSGA-II 的 importance 目標使用總和，與 coverage 一起把解推向長度上限
