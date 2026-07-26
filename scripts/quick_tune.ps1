@@ -1,3 +1,32 @@
+# =============================================================================
+# ⚠️  LEGACY SCRIPT — DO NOT USE FOR NEW RESULTS
+#
+# This script tunes hyper-parameters DIRECTLY ON THE TEST SET
+# (data/processed/multi_news_test.jsonl). The ICT Express submission then
+# selected its "best configuration" from these outputs, which is textbook
+# test-set overfitting. See docs/research/CODE_AUDIT_IEEE_Access.md and
+# paper_revision_plan_IEEE_Access.md (P0-01).
+#
+# It is kept only to reproduce the legacy artifacts in runs/tuning_experiments/.
+# Every number it produces is INVALID as a research result.
+#
+# Correct workflow: tune on validation -> freeze config -> run test ONCE.
+#
+# To run anyway (reproduction only), pass -IAcknowledgeTestSetTuning
+# =============================================================================
+param([switch]$IAcknowledgeTestSetTuning)
+
+if (-not $IAcknowledgeTestSetTuning) {
+    Write-Error @"
+Refusing to run: this script tunes on the TEST set and produces results that
+cannot be used in a paper (see P0-01). If you only need to reproduce the legacy
+artifacts, re-run with:
+
+    .\$($MyInvocation.MyCommand.Name) -IAcknowledgeTestSetTuning
+"@
+    exit 1
+}
+
 $ErrorActionPreference = "Stop"
 $Dataset = "data/processed/multi_news_test.jsonl"
 # Use the EXISTING union file from the previous full run
