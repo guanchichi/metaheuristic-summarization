@@ -1,0 +1,8 @@
+# Demo web app dependencies ONLY.
+# 研究結果的重現完全不需要這些套件；backend/ 與 frontend/ 與論文無關。
+-r requirements.txt
+
+fastapi>=0.110
+uvicorn[standard]>=0.24
+flask>=3.0
+flask-cors>=4.0

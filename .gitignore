@@ -1,4 +1,6 @@
-# Python bytecode and caches
+# ---------------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------------
 __pycache__/
 *.py[cod]
 *.so
@@ -6,8 +8,6 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-
-# Python tools
 .python-version
 .envrc
 
@@ -28,46 +28,84 @@ wheels/
 coverage.xml
 htmlcov/
 
-# Notebooks
+# ---------------------------------------------------------------------------
+# Editors / OS
+# ---------------------------------------------------------------------------
 .ipynb_checkpoints/
-
-# IDE/editor
 .idea/
 .vscode/
-
-# OS files
 .DS_Store
 Thumbs.db
 desktop.ini
 
-# Env files
+# ---------------------------------------------------------------------------
+# Secrets
+# ---------------------------------------------------------------------------
 .env
 .env.*
+*.pem
+*.key
 
-# Logs
+# Claude Code machine-local settings (permissions allowlist etc.)
+.claude/settings.local.json
+
+# ---------------------------------------------------------------------------
+# Logs / model artifacts
+# ---------------------------------------------------------------------------
 *.log
-
-# Model artifacts
 *.joblib
 *.pkl
+*.pt
+*.bin
+*.safetensors
 
-# Project data artifacts (keep small samples tracked)
-data
-data/raw/
-data/cnn_dailymail
-data/interim/
-data/processed/
-runs/
-data/DUC2002
-
-# Allowlist: keep sample data tracked (override raw ignore if needed)
+# ---------------------------------------------------------------------------
+# Datasets — never commit. Download via scripts/0_download_data.py
+#
+# NOTE: a bare `data` entry would ignore the directory itself, which makes any
+# `!data/samples/...` allowlist impossible (git cannot re-include a file inside
+# an excluded directory). So ignore the CONTENTS and then re-include samples.
+# ---------------------------------------------------------------------------
+data/*
 !data/samples/
-!data/samples/*
+!data/.gitkeep
 
-# NLP local data (optional if downloaded locally)
+# ---------------------------------------------------------------------------
+# Experiment outputs — regenerate, don't commit
+# ---------------------------------------------------------------------------
+runs/*
+!runs/README.md
+!runs/.gitkeep
+
+# Local archives produced by the cleanup plan
+*.tar.gz
+*.zip
+
+# ---------------------------------------------------------------------------
+# Archived / superseded material — kept on local disk, NOT in version control.
+#
+# These are historical trial-and-error configs, scripts and run outputs from
+# before the IEEE Access refactor. They are not current specifications and no
+# active code depends on them. Keeping them out of git keeps the repo readable
+# for collaborators; the local copies remain untouched.
+#
+# Excluded here: configs/_legacy_archive (101 files), scripts/_archive (18).
+# Already excluded via data/* and runs/*: data/processed/_archive_legacy,
+# data/_legacy_archive, runs/_archive_2026_01_15.
+# ---------------------------------------------------------------------------
+**/_archive/
+**/_archive_*/
+**/_legacy_archive/
+**/_legacy_*/
+**/_generated/
+
+# ---------------------------------------------------------------------------
+# NLP local caches
+# ---------------------------------------------------------------------------
 nltk_data/
 
-# fronted
+# ---------------------------------------------------------------------------
+# Node (demo frontend only)
+# ---------------------------------------------------------------------------
 node_modules/
-fronted/node_modules/
-fronted
+frontend/dist/
