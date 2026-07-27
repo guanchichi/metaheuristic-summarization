@@ -17,5 +17,6 @@ length_control:
 
 bert:
   model_name: "bert-base-uncased"
+  revision: "86b5e0934494bd15c9632b12f734a8a67f723594"
 
 seed: 2024
