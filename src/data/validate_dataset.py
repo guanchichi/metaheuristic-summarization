@@ -47,12 +47,15 @@ def validate_jsonl(
     dataset_digest = hashlib.sha256()
     document_counts: Counter = Counter()
     reference_counts: Counter = Counter()
+    sentence_counts: Counter = Counter()
     sentence_word_counts: Counter = Counter()
     split_counts: Counter = Counter()
     dataset_revisions: Counter = Counter()
     total_sentence_words = 0
     replacement_characters = 0
+    replacement_character_rows = 0
     debug_subset_rows = 0
+    structurally_valid_rows = 0
     for line_number, row in enumerate(read_jsonl(path), start=1):
         report["rows"] += 1
         dataset_digest.update(
@@ -61,57 +64,89 @@ def validate_jsonl(
         dataset_digest.update(b"\n")
         try:
             validate_document_example(row)
-            row_replacement_characters = sum(
-                sentence["text"].count("\ufffd")
-                for document in row["documents"]
-                for section in document["sections"]
-                for sentence in section["sentences"]
-            ) + sum(ref.count("\ufffd") for ref in row["references"])
-            replacement_characters += row_replacement_characters
-            if row_replacement_characters and not allow_replacement_character:
-                raise SchemaValidationError(
-                    f"row contains {row_replacement_characters} Unicode replacement characters"
-                )
-            if expected_split is not None and row["split"] != expected_split:
-                raise SchemaValidationError(
-                    f"split is {row['split']!r}, expected {expected_split!r}"
-                )
-            if row["id"] in seen_ids:
-                raise SchemaValidationError(f"duplicate example id: {row['id']}")
-            if not row["references"]:
-                raise SchemaValidationError("benchmark row has no references")
-            metadata = row.get("metadata", {})
-            if (
-                expected_dataset_revision is not None
-                and metadata.get("dataset_revision") != expected_dataset_revision
-            ):
-                raise SchemaValidationError(
-                    f"dataset revision is {metadata.get('dataset_revision')!r}, "
-                    f"expected {expected_dataset_revision!r}"
-                )
-            if metadata.get("is_debug_subset"):
-                debug_subset_rows += 1
-                if not allow_debug_subset:
-                    raise SchemaValidationError(
-                        "debug-subset row is forbidden in a formal dataset validation"
-                    )
-            seen_ids.add(row["id"])
-            report["documents"] += len(row["documents"])
-            document_counts[len(row["documents"])] += 1
-            reference_counts[len(row["references"])] += 1
-            split_counts[row["split"]] += 1
-            if metadata.get("dataset_revision"):
-                dataset_revisions[str(metadata["dataset_revision"])] += 1
-            for document in row["documents"]:
-                for section in document["sections"]:
-                    for sentence in section["sentences"]:
-                        report["sentences"] += 1
-                        word_count = len(sentence["text"].split())
-                        sentence_word_counts[word_count] += 1
-                        total_sentence_words += word_count
-            report["references"] += len(row["references"])
         except (KeyError, SchemaValidationError, TypeError) as exc:
             report["errors"].append({"line": line_number, "error": str(exc)})
+            continue
+
+        # Policy violations make the dataset invalid, but must not remove an
+        # otherwise well-formed row from health-report denominators.
+        structurally_valid_rows += 1
+        row_replacement_characters = sum(
+            sentence["text"].count("\ufffd")
+            for document in row["documents"]
+            for section in document["sections"]
+            for sentence in section["sentences"]
+        ) + sum(ref.count("\ufffd") for ref in row["references"])
+        replacement_characters += row_replacement_characters
+        if row_replacement_characters:
+            replacement_character_rows += 1
+            if not allow_replacement_character:
+                report["errors"].append(
+                    {
+                        "line": line_number,
+                        "error": (
+                            f"row contains {row_replacement_characters} "
+                            "Unicode replacement characters"
+                        ),
+                    }
+                )
+        if expected_split is not None and row["split"] != expected_split:
+            report["errors"].append(
+                {
+                    "line": line_number,
+                    "error": f"split is {row['split']!r}, expected {expected_split!r}",
+                }
+            )
+        if row["id"] in seen_ids:
+            report["errors"].append(
+                {"line": line_number, "error": f"duplicate example id: {row['id']}"}
+            )
+        seen_ids.add(row["id"])
+        if not row["references"]:
+            report["errors"].append(
+                {"line": line_number, "error": "benchmark row has no references"}
+            )
+        metadata = row.get("metadata", {})
+        if (
+            expected_dataset_revision is not None
+            and metadata.get("dataset_revision") != expected_dataset_revision
+        ):
+            report["errors"].append(
+                {
+                    "line": line_number,
+                    "error": (
+                        f"dataset revision is {metadata.get('dataset_revision')!r}, "
+                        f"expected {expected_dataset_revision!r}"
+                    ),
+                }
+            )
+        if metadata.get("is_debug_subset"):
+            debug_subset_rows += 1
+            if not allow_debug_subset:
+                report["errors"].append(
+                    {
+                        "line": line_number,
+                        "error": "debug-subset row is forbidden in a formal dataset validation",
+                    }
+                )
+
+        report["documents"] += len(row["documents"])
+        document_counts[len(row["documents"])] += 1
+        reference_counts[len(row["references"])] += 1
+        split_counts[row["split"]] += 1
+        if metadata.get("dataset_revision"):
+            dataset_revisions[str(metadata["dataset_revision"])] += 1
+        row_sentence_count = 0
+        for document in row["documents"]:
+            for section in document["sections"]:
+                for sentence in section["sentences"]:
+                    report["sentences"] += 1
+                    row_sentence_count += 1
+                    word_count = len(sentence["text"].split())
+                    sentence_word_counts[word_count] += 1
+                    total_sentence_words += word_count
+        sentence_counts[row_sentence_count] += 1
+        report["references"] += len(row["references"])
     if expected_rows is not None and report["rows"] != expected_rows:
         report["errors"].append(
             {
@@ -128,8 +163,29 @@ def validate_jsonl(
     report["health"] = {
         "split_counts": dict(sorted(split_counts.items())),
         "dataset_revisions": dict(sorted(dataset_revisions.items())),
+        "structurally_valid_rows": structurally_valid_rows,
         "documents_per_example": dict(sorted(document_counts.items())),
         "references_per_example": dict(sorted(reference_counts.items())),
+        "sentences_per_example": {
+            "mean": (
+                report["sentences"] / structurally_valid_rows
+                if structurally_valid_rows
+                else None
+            ),
+            "min": min(sentence_counts, default=None),
+            "p50": _percentile_from_histogram(sentence_counts, 0.50),
+            "p95": _percentile_from_histogram(sentence_counts, 0.95),
+            "p99": _percentile_from_histogram(sentence_counts, 0.99),
+            "max": max(sentence_counts, default=None),
+            "under_20": sum(
+                count for sentence_count, count in sentence_counts.items()
+                if sentence_count < 20
+            ),
+            "under_40": sum(
+                count for sentence_count, count in sentence_counts.items()
+                if sentence_count < 40
+            ),
+        },
         "sentence_words": {
             "mean": (
                 total_sentence_words / report["sentences"] if report["sentences"] else None
@@ -143,6 +199,7 @@ def validate_jsonl(
             ),
         },
         "unicode_replacement_characters": replacement_characters,
+        "unicode_replacement_rows": replacement_character_rows,
         "debug_subset_rows": debug_subset_rows,
     }
     if report["rows"] == 0:

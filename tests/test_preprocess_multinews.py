@@ -118,9 +118,18 @@ def test_trailing_extra_delimiter_drops_empty_segment_and_records_it():
 
 
 def test_empty_document_between_delimiters_is_dropped_not_failed():
-    documents, dropped = split_source_documents("First document. ||||| ||||| Third document.")
+    raw = "First document. ||||| ||||| Third document."
+    documents, dropped = split_source_documents(raw)
     assert [doc["text"] for doc in documents] == ["First document.", "Third document."]
     assert len(dropped) == 1
+    row = process_example(
+        {"document": raw, "summary": "A summary."}, split="test", row_index=0
+    )
+    assert [
+        document["metadata"]["original_document_position"]
+        for document in row["documents"]
+    ] == [0, 2]
+    assert [document["source_order"] for document in row["documents"]] == [0, 1]
 
 
 def test_wholly_empty_document_raises_degenerate_row_error():

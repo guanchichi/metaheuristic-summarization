@@ -6,8 +6,9 @@ optimizer dispatch — each delegated to its own module.
 
 import argparse
 import os
+import re
 import time
-from typing import Dict, List
+from typing import Dict, List, Mapping
 
 import numpy as np
 from tqdm import tqdm
@@ -17,7 +18,7 @@ from src.utils.io import (
     ensure_dir,
     now_stamp,
     read_jsonl,
-    write_jsonl,
+    write_jsonl_atomic,
     set_global_seed,
 )
 from src.representations.sent_vectors import SentenceVectors
@@ -28,7 +29,8 @@ from src.pipeline.feature_builder import build_base_scores
 from src.pipeline.candidate_builder import build_candidate_pool
 from src.pipeline.optimizer_dispatch import dispatch_optimizer
 from src.objectives.factory import build_objective_spec, validate_selector_for_task
-from src.objectives.evaluator import objective_from_spec
+from src.objectives.evaluator import maximum_feasible_words, objective_from_spec
+from src.utils.tokenizer import count_tokens
 
 
 # ------------------------------------------------------------------ #
@@ -42,6 +44,58 @@ def validate_requested_split(doc: Dict, requested_split: str) -> None:
         raise ValueError(
             f"canonical row {doc.get('id')!r} belongs to split {doc.get('split')!r}, "
             f"but --split is {requested_split!r}"
+        )
+
+
+def validate_experiment_request(cfg: Mapping, requested_split: str) -> None:
+    """Enforce config-level data-access gates before a run starts."""
+
+    experiment = cfg.get("experiment")
+    if experiment is None:
+        # Legacy reproduction configs predate the experiment contract. They
+        # remain runnable, but cannot acquire a formal status implicitly.
+        return
+    if not isinstance(experiment, Mapping):
+        raise ValueError("experiment configuration must be an object")
+    status = experiment.get("status")
+    if status != "validation_pilot_only":
+        raise ValueError(
+            f"unknown experiment.status {status!r}; only "
+            "'validation_pilot_only' is currently implemented"
+        )
+    if requested_split != "validation":
+        raise ValueError(
+            "experiment.status='validation_pilot_only' may only access the "
+            f"validation split, not {requested_split!r}"
+        )
+
+
+def _normalized_dataset_name(value: object) -> str:
+    return re.sub(r"[^a-z0-9]+", "", str(value or "").lower())
+
+
+def validate_experiment_document(cfg: Mapping, doc: Mapping) -> None:
+    """Bind a governed experiment config to canonical split/dataset metadata."""
+
+    experiment = cfg.get("experiment")
+    if experiment is None:
+        return
+    if "schema_version" not in doc:
+        raise ValueError(
+            "governed experiments require canonical rows with split and dataset provenance"
+        )
+    split = doc.get("split")
+    validate_experiment_request(cfg, str(split or ""))
+    expected_dataset = experiment.get("dataset")
+    if not isinstance(expected_dataset, str) or not expected_dataset.strip():
+        raise ValueError("governed experiments require experiment.dataset")
+    actual_dataset = doc.get("dataset_name")
+    if _normalized_dataset_name(actual_dataset) != _normalized_dataset_name(
+        expected_dataset
+    ):
+        raise ValueError(
+            f"experiment dataset {expected_dataset!r} does not match canonical "
+            f"row dataset_name {actual_dataset!r}"
         )
 
 
@@ -77,6 +131,7 @@ def attach_selector_salience(
 
 
 def summarize_one(doc: Dict, cfg: Dict) -> Dict:
+    validate_experiment_document(cfg, doc)
     sentence_records = flatten_sentence_records(doc)
     sentences: List[str] = [record["text"] for record in sentence_records]
 
@@ -113,11 +168,11 @@ def summarize_one(doc: Dict, cfg: Dict) -> Dict:
     selector_budget = max_words if unit == "words" else max_tokens
     max_sents_limit = lc.get("max_sentences", None)
     max_sents = int(max_sents_limit) if (max_sents_limit is not None) else None
-    min_words = int(lc.get("min_words", 0))
+    requested_min_words = int(lc.get("min_words", 0))
     require_nonempty = bool(lc.get("require_nonempty", True))
-    if min_words < 0:
+    if requested_min_words < 0:
         raise ValueError("length_control.min_words cannot be negative")
-    if unit in {"words", "tokens"} and min_words > selector_budget:
+    if unit in {"words", "tokens"} and requested_min_words > selector_budget:
         raise ValueError(
             "length_control.min_words cannot exceed the active maximum length"
         )
@@ -133,6 +188,44 @@ def summarize_one(doc: Dict, cfg: Dict) -> Dict:
                 f"but config declares {max_sents}"
             )
         max_sents = int(required_max_sentences)
+
+    source_capacity_words = maximum_feasible_words(
+        sentences,
+        max_length=selector_budget,
+        length_unit=unit,
+        max_sentences=max_sents,
+    )
+    effective_min_words = min(requested_min_words, source_capacity_words)
+    min_words_relaxed = effective_min_words < requested_min_words
+    relaxation_reason = "source_intrinsic_capacity" if min_words_relaxed else None
+
+    # Sentences longer than the active word/token budget can never occur in a
+    # feasible extractive summary.  Do not let them consume route proposals or
+    # candidate reservations; retain auditable exclusion records instead.
+    if unit in {"words", "tokens"}:
+        selection_eligible_indices = [
+            index
+            for index, sentence in enumerate(sentences)
+            if count_tokens(sentence) <= selector_budget
+        ]
+    else:
+        selection_eligible_indices = list(range(len(sentences)))
+    selection_eligible_set = set(selection_eligible_indices)
+    ineligible_sentences = [
+        {
+            "sentence_id": sentence_records[index]["sentence_id"],
+            "original_index": index,
+            "word_count": count_tokens(sentences[index]),
+            "reason": "exceeds_active_output_budget",
+        }
+        for index in range(len(sentences))
+        if index not in selection_eligible_set
+    ]
+    if sentences and require_nonempty and not selection_eligible_indices:
+        raise ValueError(
+            f"source document {doc.get('id')!r} has no sentence eligible under "
+            f"the active {unit} budget {selector_budget}"
+        )
 
     # 4. Candidate pool. Per-route quota and final selector budget are
     # deliberately separate from the output-length budget above.
@@ -178,13 +271,20 @@ def summarize_one(doc: Dict, cfg: Dict) -> Dict:
     soft_boost = float(cand_cfg.get("soft_boost", 1.05))
 
     g_thresh = float(cfg.get("graph_params", {}).get("threshold", 0.0))
+    eligible_records = [sentence_records[index] for index in selection_eligible_indices]
+    eligible_scores = [base_scores[index] for index in selection_eligible_indices]
+    eligible_sim = (
+        sim[np.ix_(selection_eligible_indices, selection_eligible_indices)]
+        if sim is not None
+        else None
+    )
     candidate_pool_result = (
         build_candidate_pool(
-            sentence_records,
-            base_scores,
+            eligible_records,
+            eligible_scores,
             k,
             sources,
-            sim_matrix=sim,
+            sim_matrix=eligible_sim,
             threshold=g_thresh,
             total_budget=total_candidate_budget,
             min_per_route=min_per_route,
@@ -205,15 +305,15 @@ def summarize_one(doc: Dict, cfg: Dict) -> Dict:
     salience_source = str(selector_cfg.get("salience_source", "base_score"))
 
     # 5. Apply candidate mode
-    if use_cand and cand_idx:
-        if mode == "hard":
-            sub_sentences = [sentences[i] for i in cand_idx]
-            sub_scores = attach_selector_salience(
-                candidate_records, base_scores, salience_source
-            )
-            sub_sim = sim[np.ix_(cand_idx, cand_idx)] if sim is not None else None
-            sub_coverage = sim[:, cand_idx] if sim is not None else None
-        else:
+    if use_cand and mode == "hard":
+        sub_sentences = [sentences[i] for i in cand_idx]
+        sub_scores = attach_selector_salience(
+            candidate_records, base_scores, salience_source
+        )
+        sub_sim = sim[np.ix_(cand_idx, cand_idx)] if sim is not None else None
+        sub_coverage = sim[:, cand_idx] if sim is not None else None
+    elif use_cand and cand_idx:
+        if mode != "hard":
             if salience_source.lower() not in {"base_score", "membership_only"}:
                 raise ValueError(
                     "provenance-aware selector salience requires candidates.mode='hard'"
@@ -230,6 +330,20 @@ def summarize_one(doc: Dict, cfg: Dict) -> Dict:
         sub_sim = sim
         sub_coverage = sim
 
+    candidate_capacity_words = maximum_feasible_words(
+        sub_sentences,
+        max_length=selector_budget,
+        length_unit=unit,
+        max_sentences=max_sents,
+    )
+    if use_cand and mode == "hard" and candidate_capacity_words < effective_min_words:
+        raise ValueError(
+            f"candidate pool for document {doc.get('id')!r} cannot satisfy the "
+            f"effective minimum: candidate_capacity_words={candidate_capacity_words}, "
+            f"effective_min_words={effective_min_words}, "
+            f"source_capacity_words={source_capacity_words}"
+        )
+
     # 6. Optimizer dispatch. A word budget no longer bypasses the configured
     # selector; it is simply the selector's independent output constraint.
     optimizer_diagnostics: Dict = {}
@@ -244,7 +358,7 @@ def summarize_one(doc: Dict, cfg: Dict) -> Dict:
         unit,
         max_sents,
         objective_spec,
-        min_words,
+        effective_min_words,
         require_nonempty,
         optimizer_diagnostics,
         sub_coverage,
@@ -260,7 +374,7 @@ def summarize_one(doc: Dict, cfg: Dict) -> Dict:
             max_length=selector_budget,
             length_unit=unit,
             max_sentences=max_sents,
-            min_words=min_words,
+            min_words=effective_min_words,
             require_nonempty=require_nonempty,
             coverage_matrix=sub_coverage,
         )
@@ -335,6 +449,7 @@ def summarize_one(doc: Dict, cfg: Dict) -> Dict:
             "selector_salience_source": salience_source,
             "route_proposals": candidate_pool_result["route_proposals"],
             "allocation": candidate_pool_result["allocation"],
+            "selection_ineligible_sentences": ineligible_sentences,
         },
         "objective_spec": objective_spec,
         "selection_evaluation": selection_evaluation,
@@ -344,7 +459,13 @@ def summarize_one(doc: Dict, cfg: Dict) -> Dict:
             "max_words": max_words if unit == "words" else None,
             "max_tokens": max_tokens if unit == "tokens" else None,
             "max_sentences": max_sents,
-            "min_words": min_words,
+            "min_words": effective_min_words,
+            "requested_min_words": requested_min_words,
+            "effective_min_words": effective_min_words,
+            "source_capacity_words": source_capacity_words,
+            "candidate_capacity_words": candidate_capacity_words,
+            "min_words_relaxed": min_words_relaxed,
+            "relaxation_reason": relaxation_reason,
             "require_nonempty": require_nonempty,
         },
         "task_profile": doc.get("task_profile"),
@@ -354,6 +475,29 @@ def summarize_one(doc: Dict, cfg: Dict) -> Dict:
 # ------------------------------------------------------------------ #
 #  CLI entry-point                                                     #
 # ------------------------------------------------------------------ #
+
+def summarize_jsonl(
+    input_path: str,
+    predictions_path: str,
+    cfg: Dict,
+    requested_split: str,
+) -> int:
+    """Stream one dataset into an atomic prediction artifact."""
+
+    processed = 0
+
+    def prediction_rows():
+        nonlocal processed
+        for doc in tqdm(read_jsonl(input_path), desc="Summarizing"):
+            validate_requested_split(doc, requested_split)
+            result = summarize_one(doc, cfg)
+            processed += 1
+            yield result
+        if processed == 0:
+            raise ValueError("input dataset is empty; refusing to write an empty run")
+
+    write_jsonl_atomic(predictions_path, prediction_rows())
+    return processed
 
 def main():
     ap = argparse.ArgumentParser()
@@ -369,6 +513,8 @@ def main():
     if args.optimizer:
         cfg.setdefault("optimizer", {})
         cfg["optimizer"]["method"] = args.optimizer
+
+    validate_experiment_request(cfg, args.split)
 
     # Guard: Stage2 union input should use fast (non-BERT) optimizers only
     method_opt = (cfg.get("optimizer", {}).get("method") or "").lower()
@@ -387,12 +533,7 @@ def main():
 
     preds_path = os.path.join(out_dir, "predictions.jsonl")
     t0 = time.perf_counter()
-    docs = list(read_jsonl(args.input))
-    rows = []
-    for doc in tqdm(docs, desc="Summarizing", total=len(docs)):
-        validate_requested_split(doc, args.split)
-        rows.append(summarize_one(doc, cfg))
-    write_jsonl(preds_path, rows)
+    summarize_jsonl(args.input, preds_path, cfg, args.split)
     t1 = time.perf_counter()
 
     # dump the config used

@@ -274,9 +274,10 @@ CandidateRecord
 
 硬限制：
 
-- `min_words <= selected_words <= max_words`，若不設 min_words，必須另報實際長度並做 length-matched baseline。
+- `effective_min_words <= selected_words <= max_words`。`requested_min_words` 是全域實驗設定；`effective_min_words = min(requested_min_words, source_capacity_words)`，其中 capacity 必須精確考慮句子不可切割、`max_words` 與 `max_sentences`。只有完整來源本身不可達時可逐列調降並記錄 reason；若全文可達但 hard candidate pool 不可達，屬 pipeline defect，禁止再次調降。若不設 min_words，必須另報實際長度並做 length-matched baseline。
 - `max_sentences` 僅在資料集協定要求時啟用。
 - 空集合不可成為合法最終摘要。
+- 單句長度已超過 active word/token budget 時，該句在 extractive contract 下永遠不可選，必須在 route top-K 前移出 selection universe，且於 artifact 保存 sentence ID、word count 與 reason；不得讓它消耗 route reservation 或 total candidate cap。這不授權靜默重切 canonical sentence。
 
 所有 objective 在單一文件內正規化到固定方向與尺度；不能把未正規化 sum、mean 與成本混在一起。
 

@@ -3,7 +3,11 @@
 import pytest
 
 from src.data.schemas import build_document_example
-from src.pipeline.select_sentences import summarize_one, validate_requested_split
+from src.pipeline.select_sentences import (
+    summarize_jsonl,
+    summarize_one,
+    validate_requested_split,
+)
 
 
 @pytest.fixture
@@ -313,7 +317,9 @@ class TestPipelineEdgeCases:
         assert result["selection_evaluation"]["coverage_universe_size"] == 2
         assert result["objective_spec"]["coverage_scope"] == "full_source_sentences"
 
-    def test_impossible_minimum_length_fails_loudly(self, base_config):
+    def test_source_intrinsic_minimum_shortfall_is_relaxed_and_recorded(
+        self, base_config
+    ):
         doc = build_document_example(
             example_id="impossible-min",
             split="validation",
@@ -327,8 +333,81 @@ class TestPipelineEdgeCases:
             "max_words": 10,
             "min_words": 5,
         }
-        with pytest.raises(ValueError, match="infeasible summary"):
+        result = summarize_one(doc, base_config)
+        budget = result["output_budget"]
+        assert result["selected_indices"] == [0]
+        assert budget["requested_min_words"] == 5
+        assert budget["effective_min_words"] == 3
+        assert budget["source_capacity_words"] == 3
+        assert budget["candidate_capacity_words"] == 3
+        assert budget["min_words_relaxed"] is True
+        assert budget["relaxation_reason"] == "source_intrinsic_capacity"
+
+    def test_candidate_pool_cannot_hide_a_feasible_source(self, base_config):
+        doc = build_document_example(
+            example_id="candidate-infeasible",
+            split="validation",
+            documents=[["one two three", "four five six seven eight six"]],
+            references=["Reference."],
+            input_mode="single_document",
+            output_mode="multi_sentence",
+        )
+        base_config["length_control"] = {
+            "unit": "words",
+            "max_words": 10,
+            "min_words": 6,
+        }
+        base_config["candidates"] = {
+            "use": True,
+            "mode": "hard",
+            "sources": ["score"],
+        }
+        base_config["candidate_budget"] = {"route_top_k": 1, "total": 1}
+        base_config["features"] = {
+            "weights": {
+                "importance": 0.0,
+                "length": 0.0,
+                "position": 1.0,
+                "graph": 0.0,
+                "centrality": 0.0,
+                "novelty": 0.0,
+            }
+        }
+        with pytest.raises(ValueError, match="candidate pool.*cannot satisfy"):
             summarize_one(doc, base_config)
+
+    def test_over_budget_sentence_does_not_consume_candidate_quota(
+        self, base_config
+    ):
+        doc = build_document_example(
+            example_id="oversized-sentence",
+            split="validation",
+            documents=[["oversized " * 11, "short usable sentence"]],
+            references=["Reference."],
+            input_mode="single_document",
+            output_mode="multi_sentence",
+        )
+        base_config["length_control"] = {
+            "unit": "words",
+            "max_words": 10,
+            "min_words": 0,
+        }
+        base_config["candidates"] = {
+            "use": True,
+            "mode": "hard",
+            "sources": ["score"],
+        }
+        base_config["candidate_budget"] = {"route_top_k": 1, "total": 1}
+        result = summarize_one(doc, base_config)
+        assert [item["original_index"] for item in result["candidate_records"]] == [1]
+        assert result["candidate_pool"]["selection_ineligible_sentences"] == [
+            {
+                "sentence_id": "oversized-sentence:d000:s000000",
+                "original_index": 0,
+                "word_count": 11,
+                "reason": "exceeds_active_output_budget",
+            }
+        ]
 
     def test_profiled_multi_sentence_rejects_sum_importance(self, base_config):
         doc = build_document_example(
@@ -366,3 +445,36 @@ class TestPipelineEdgeCases:
         )
         with pytest.raises(ValueError, match="belongs to split 'validation'"):
             validate_requested_split(doc, "test")
+
+    def test_jsonl_runner_streams_into_atomic_writer(
+        self, sample_doc, base_config, monkeypatch
+    ):
+        captured = {}
+        monkeypatch.setattr(
+            "src.pipeline.select_sentences.read_jsonl", lambda _path: iter([sample_doc])
+        )
+
+        def capture_writer(path, rows):
+            captured["path"] = path
+            captured["rows"] = list(rows)
+
+        monkeypatch.setattr(
+            "src.pipeline.select_sentences.write_jsonl_atomic", capture_writer
+        )
+        count = summarize_jsonl(
+            "input.jsonl", "predictions.jsonl", base_config, "test"
+        )
+        assert count == 1
+        assert captured["path"] == "predictions.jsonl"
+        assert len(captured["rows"]) == 1
+
+    def test_jsonl_runner_rejects_empty_input(self, base_config, monkeypatch):
+        monkeypatch.setattr(
+            "src.pipeline.select_sentences.read_jsonl", lambda _path: iter(())
+        )
+        monkeypatch.setattr(
+            "src.pipeline.select_sentences.write_jsonl_atomic",
+            lambda _path, rows: list(rows),
+        )
+        with pytest.raises(ValueError, match="input dataset is empty"):
+            summarize_jsonl("empty.jsonl", "predictions.jsonl", base_config, "test")

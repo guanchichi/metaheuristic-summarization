@@ -70,8 +70,8 @@
 - [ ] 歸檔 100 個 legacy configs、237 個 archived runs、35 個 archived scripts
 - [ ] 將疑似死碼 `src/pipeline/build_features.py` 移入 legacy archive；先做入口與歷史重現檢查，不直接刪除
 - [ ] `frontend/`、`backend/`、`experimental/`、`notebooks/` 移出研究主線（另開 repo 或標明與論文無關）
-- [ ] 修 `requirements.txt`：`pymoo` 與 `scikit-learn` 各有重複且相容的宣告，需整理成單一明確 lock intent
-- [ ] 把 `pytest` 納入 dev dependencies，建立可重現環境並讓完整 `tests/` 能跑
+- [~] runtime／CI requirements 已拆分且重複宣告已清除；正式 Python／套件 lockfile 與乾淨環境重製仍未完成
+- [~] `pytest` 已納入依賴、完整 tests 與 GitHub Actions 可跑；仍待把 test tooling 從 runtime requirements 分離成明確 dev lock
 
 **Gate 0**：`ls configs/` 與 `ls runs/` 一眼看得懂哪些是現行的。
 
@@ -95,7 +95,7 @@
 
 **1a 的共同驗收條件**（全部完成才能把上面的 `[~]` 改成 `[x]`）：
 
-- [x] `pip install pytest` 並讓 `tests/` 能跑（2026-07-26：108 passed）
+- [x] `pip install pytest` 並讓 `tests/` 能跑（2026-07-27：189 passed）
 - [ ] 每個 patch 都有對應的 regression test（見 1e）
 - [ ] **條件式**：若保留 SciTLDR stress test，official single-sentence oracle 須重現 R1 ≈ 52.4；若不保留，維持 evaluator fail-closed 即可，不阻塞 Phase 1
 
@@ -109,13 +109,13 @@
 - [ ] 下載並驗證 GovReport 官方資料：split、row count、checksum、license、section metadata 與異常列規則
 - [x] `max_words / max_sentences / max_model_tokens / candidate_budget / compute_budget` 已拆成不同設定與 output artifact；`unit: words` 不再繞過 selector
 - [ ] 重建 **CNN/DM 官方 split**：train 287,113 / validation 13,368 / **test 11,490**
-- [~] 資料健檢器已實作：筆數、ID、split、文件／reference 數、句長分布、U+FFFD、debug subset、revision 與 checksum；待完整資料生成後保存三個正式報告
-      （已知：Multi-News test 有 1 筆零句文件、`test_4241` 有 3,295 句）
+- [~] 資料健檢器已實作：筆數、ID、split、文件／reference／每列句數分布、U+FFFD、debug subset、revision 與 checksum；完整 pinned Multi-News validation 已生成並保存摘要證據，其他 split／dataset 報告仍待完成
+      （validation：5,622 raw → 5,621 canonical，1 列空來源排除；72 列／1,042 個 U+FFFD 使 strict gate 失敗；58 個 singleton clusters；412 列少於 20 句；最大 3,347 句，單句最長 2,638 words。資料納入／排除政策尚未 freeze）
 
 ### 1c. 候選生成重構 🔴 這是核心
 
 - [x] 🔴 **lexical、semantic、sparse graph/structure 三路各自在完整輸入上獨立排名**，不可先被共同候選池截斷
-- [x] 🔴 **候選池多來源聯集**：lexical／semantic sentence encoder／sparse graph 均先對完整輸入評分；`route_top_k` 保存 proposals、`min_per_route` 優先保留 route-exclusive evidence，再以 RRF 填 total cap
+- [x] 🔴 **候選池多來源聯集**：lexical／semantic sentence encoder／sparse graph 均先對完整輸入評分；`route_top_k` 保存 proposals、`min_per_route` 優先保留 route-exclusive evidence，再以 RRF 填 total cap；短文件以逐列 effective reservation 誠實降級並保存 requested/effective/shortfall，非法全域設定仍 fail loud
 - [x] 🔴 position／document／section strata coverage guard 已可獨立設定；輸出明記 `guard:*` reason，且不把它們宣稱為第四個語意 route
 - [x] candidate record 保存 `sentence_id / original_index / document_id / section_id / route raw score / rank / percentile / route agreement / fusion score / inclusion reason / model revision / deterministic cost facts`
 - [x] K 在完整 rank 排序後截取；RRF 只能從 proposal union 與 explicit guards 填補，不得從全文引入任何 route top-K 外句子；最後才按原文位置輸出候選
@@ -126,7 +126,7 @@
 - [~] semantic route 已要求明確 sentence-encoder checkpoint/revision、一次載入、batch encode，並記錄 `max_model_tokens` 與截斷率；pinned MiniLM 真實 CPU 與 3-row Multi-News smoke 已通過，尚待正式 cold/warm cost pilot
 - [x] graph candidate route 預設為有界 TF-IDF cosine sparse kNN；dense `N×N` 僅能以 `dense_legacy` 明確啟用
 - [x] 候選融合採 normalized reciprocal-rank fusion、rank percentile 與 route agreement；MVP selector 實際接收 RRF salience，不再只使用 provenance membership
-- [x] candidate route 與已啟用 feature 失敗會使 run fail；不再填 0 或靜默 fallback
+- [x] candidate route、已啟用 feature 與 similarity implementation 失敗會使 run fail；不再填 0、切換 NumPy 實作或靜默 fallback
 - [~] 已建立 `compute_budget.mode: fixed` 與明確 enabled routes；adaptive allocator 尚未實作，若誤設為 adaptive 會 fail loud
 
 ### 1e. Objective 與 selector contract
@@ -134,11 +134,11 @@
 - [~] task-profile factory 已使單句只啟用 salience、強制一個句子並拒絕 subset NSGA-II；document-group coverage 尚未實作，若提前宣告會 fail loud
 - [~] canonical multi-sentence 已禁止 raw sum，僅允許 mean／length-normalized salience；shared evaluator 已固定 salience／full-source facility coverage／平均 pairwise redundancy 的方向與 aggregation，並把 `full source × candidates` coverage matrix 與 `candidates × candidates` redundancy matrix 分開；權重與跨文件尺度仍待 validation pilot
 - [~] @chi 07-27 | 上一項的禁令只涵蓋「有 `task_profile` 且 `output_mode=multi_sentence`」的路徑（`factory.py:87-92`）；沒有 `task_profile` 的 legacy_unprofiled 路徑（`factory.py:44-57`）預設仍是 `sum`，不受此禁令限制，屬潛在缺陷、尚未確認實際造成污染，詳見 `CODE_AUDIT_IEEE_Access.md` F-14
-- [x] `min_words / max_words / max_sentences / non-empty` 已由同一 feasibility contract 判斷；不可行解 fail loud，不作未記錄的空集合或長度 repair
+- [x] `min_words / max_words / max_sentences / non-empty` 已由同一 feasibility contract 判斷；逐列以 exact source capacity 產生 requested/effective minimum 並保存 reason，僅允許 source-intrinsic shortfall 誠實調降。candidate pool 若不能達到 effective minimum、或 optimizer 在可行時失敗，仍 fail loud；不可選超長句不占 route/candidate quota 並留下 artifact
 - [~] deterministic greedy、GRASP 與 NSGA-II 在**新 canonical pipeline** 已使用完全相同 candidates、objectives 與 constraints（注入同一 `SelectionObjective`），且保存 final evaluation；獨立 MMR baseline 尚待 Phase 2
 - [ ] @chi 07-27 | **legacy config 仍違反此條**：`2_Fusion_NoNsga2.yaml`（`fast_fused`→`greedy_select`）與 `2_Fusion_ExpA/B/C`（`fast_nsga2`→`nsga2_select`）走不同呼叫鏈，差異不只 optimizer，因此不是 matched ablation，證據見 F-15
 - [~] NSGA-II artifact 已保存完整可行 Pareto front 與 per-solution objectives；目前 weighted-sum Pareto policy 僅為 provisional，仍須在 validation 凍結 knee/reference-point policy
-- [~] 3-row correctness smoke 證實未設下限時 mean-salience 會退化成 1 句（41–88 words）；MVP 因此暫設 200–250 words 作 length-matched validation band，數值尚未 freeze，且不得依 test 調整
+- [~] 3-row correctness smoke 證實未設下限時 mean-salience 會退化成 1 句（41–88 words）；MVP 因此暫設 requested 200–250 words 作 length-matched validation band。完整 validation 有 72/5,621 列的全文低於 200 words，精確 upper-bound feasibility audit 亦恰為這 72 列（沒有額外 fragmentation case），故逐列 effective minimum 誠實調降；數值與最終 objective 仍未 freeze，且不得依 test 調整
 - [x] full-source coverage smoke 的 coverage universe 為 80／227／92 句（非 candidate pool 的 55／60／60）；三筆輸出為 246／240／248 words、全部 feasible，union/guard 越界與 RRF mismatch 皆為 0
 - [x] non-negative smoothed TF-ISF v2 重跑同一 smoke，輸出長度與選句數維持 246／240／248 words、5／4／7 句，provenance revision 正確且所有 contract checks 仍通過
 
@@ -149,11 +149,11 @@
 - [x] `rougeL` vs `rougeLsum`、pred/ref 對稱分句、corpus guard 與 per-example mean alignment golden tests
 - [~] SciTLDR max-ROUGE-1 選定同一 reference 的 aggregation rule 已依官方 `cal-rouge.py` 釘住；只有決定保留 SciTLDR 時，才需再完成 local `rouge-score` 對官方 `files2rouge` 的數值 conformance
 - [x] Graph：diagonal、threshold、dangling node、sparse edge bound
-- [x] 候選 top-K rank、union boundary、route reservation、RRF selector handoff、route provenance 與 document guard 測試
+- [x] 候選 top-K rank、union boundary、route reservation（含短文件 shortfall）、RRF selector handoff、route provenance 與 document guard 測試
 - [x] canonical schema 與 production prediction 已保存 Multi-News document boundaries／selected sentence provenance；candidate route 與 enabled feature 均 fail loud
 - [~] task-profile matrix 已測 single sentence 不建立 redundancy objective且拒絕 subset NSGA-II；multi-document group coverage 尚未完成
 - [x] shared objective 手算 golden、min/max/non-empty feasibility、Greedy/GRASP/NSGA-II handoff、NSGA-II 參數傳遞、seed 跨重跑決定性與 **no-fallback** 已測
-- [ ] 10 篇 toy pipeline snapshot test
+- [x] 10 篇 toy pipeline snapshot test；保存 route/proposal/reservation/guard/selector/objective/feasibility 決策軌跡，float 使用跨平台 tolerance
 
 **Gate 1**：所有手算測試通過；同 seed 重跑得到相同 indices；故意移除 pymoo 時 run 必須 fail。
 

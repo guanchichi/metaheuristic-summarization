@@ -156,9 +156,9 @@ CONFIG = {
     },
     "representations": {"use": True, "method": "tfidf"},
     "compute_budget": {"mode": "fixed", "enabled_routes": ["lexical", "semantic"]},
-    # min_per_route is 1, not 2, because a reservation larger than the shortest
-    # document currently raises. See TestShortDocumentReservation below.
-    "candidate_budget": {"route_top_k": 4, "min_per_route": 1, "total": 6},
+    # The single-sentence toy row exercises the per-document reservation
+    # shortfall path: requested=2, effective=1 for each route.
+    "candidate_budget": {"route_top_k": 4, "min_per_route": 2, "total": 6},
     "candidates": {"use": True, "mode": "hard", "rrf_constant": 60},
     "routes": {
         "lexical": {"revision": "toy-lexical:v1"},
@@ -336,22 +336,7 @@ class TestToyPipelineSnapshot:
 
 
 class TestShortDocumentReservation:
-    """Pins current behaviour when a document has fewer sentences than the
-    per-route reservation.
-
-    ``route_top_k`` is clamped to the document's sentence count before
-    ``min_per_route`` is validated against it, so a short document surfaces as
-    a configuration error rather than as a document the reservation cannot be
-    satisfied for.
-
-    This matters in production: with the Phase 1 MVP setting
-    (``route_top_k: 40, min_per_route: 20``), roughly 9% of Multi-News
-    validation documents have fewer than 20 sentences and would abort the run.
-
-    These tests record the behaviour as it stands. If the semantics are changed
-    so a reservation is clamped to what the document can supply, update them and
-    say so explicitly -- do not let the change pass silently.
-    """
+    """A valid global reservation degrades honestly on a short document."""
 
     def _single_sentence_doc(self):
         return build_document_example(
@@ -364,7 +349,7 @@ class TestShortDocumentReservation:
             dataset_name="toy",
         )
 
-    def test_reservation_larger_than_the_document_raises(self, monkeypatch):
+    def test_reservation_larger_than_the_document_records_shortfall(self, monkeypatch):
         import src.pipeline.candidate_builder as candidate_builder
 
         monkeypatch.setattr(
@@ -374,7 +359,38 @@ class TestShortDocumentReservation:
         config["candidate_budget"] = {
             "route_top_k": 40, "min_per_route": 20, "total": 60
         }
-        with pytest.raises(ValueError, match="exceeds route_top_k"):
+        result = summarize_one(self._single_sentence_doc(), config)
+        allocation = result["candidate_pool"]["allocation"]
+        assert result["selected_indices"] == [0]
+        assert allocation["requested_route_top_k"] == 40
+        assert allocation["effective_route_top_k"] == 1
+        assert allocation["requested_min_per_route"] == {
+            "lexical": 20,
+            "semantic": 20,
+        }
+        assert allocation["effective_min_per_route"] == {
+            "lexical": 1,
+            "semantic": 1,
+        }
+        assert allocation["reservation_shortfall_by_route"] == {
+            "lexical": 19,
+            "semantic": 19,
+        }
+        assert result["selection_evaluation"]["feasible"]
+
+    def test_reservation_larger_than_configured_route_top_k_still_fails(
+        self, monkeypatch
+    ):
+        import src.pipeline.candidate_builder as candidate_builder
+
+        monkeypatch.setattr(
+            candidate_builder, "encoder_route_scores", _stub_encoder_route_scores
+        )
+        config = json.loads(json.dumps(CONFIG))
+        config["candidate_budget"] = {
+            "route_top_k": 4, "min_per_route": 5, "total": 6
+        }
+        with pytest.raises(ValueError, match="exceeds configured route_top_k"):
             summarize_one(self._single_sentence_doc(), config)
 
     def test_reservation_within_the_document_succeeds(self, monkeypatch):

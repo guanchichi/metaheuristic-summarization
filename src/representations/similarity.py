@@ -3,16 +3,13 @@ import numpy as np
 
 
 def cosine_similarity_matrix(X: Union[np.ndarray, "scipy.sparse.spmatrix"]) -> np.ndarray:
-    try:
-        from sklearn.metrics.pairwise import cosine_similarity
+    """Return the declared sklearn cosine implementation or fail loudly.
 
-        return cosine_similarity(X)
-    except Exception:
-        # minimal fallback
-        if hasattr(X, "toarray"):
-            X = X.toarray()
-        X = np.asarray(X)
-        norms = np.linalg.norm(X, axis=1, keepdims=True) + 1e-12
-        Xn = X / norms
-        return Xn @ Xn.T
+    A broad fallback used to turn dependency, shape, and non-finite-input errors
+    into a different NumPy implementation. That made the effective method depend
+    on the machine and could let invalid matrices continue through a formal run.
+    """
 
+    from sklearn.metrics.pairwise import cosine_similarity
+
+    return cosine_similarity(X)

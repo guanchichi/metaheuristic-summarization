@@ -1,0 +1,59 @@
+{
+  "artifact_status": "strict_policy_blocked",
+  "dataset": "alexfabbri/multi_news",
+  "dataset_revision": "1f20a01dbf6463236108a8d7fd39f3ae9750dcc3",
+  "split": "validation",
+  "preprocessor_version": "multinews-canonical-v3",
+  "source_rows": 5622,
+  "canonical_rows": 5621,
+  "excluded_rows": 1,
+  "excluded_source_row_indices": [4850],
+  "exclusion_reason": "empty source cluster",
+  "documents": 15177,
+  "sentences": 456942,
+  "references": 5621,
+  "singleton_clusters": 58,
+  "sentences_per_example": {
+    "mean": 81.29194093577655,
+    "min": 2,
+    "p50": 61,
+    "p95": 214,
+    "p99": 385,
+    "max": 3347,
+    "max_example_id": "validation_2284",
+    "under_20": 412,
+    "under_20_percent": 7.329656644725138,
+    "under_40": 1581
+  },
+  "sentence_words": {
+    "mean": 21.548012658061637,
+    "p50": 19,
+    "p95": 46,
+    "p99": 71,
+    "max": 2638,
+    "max_example_id": "validation_5156",
+    "max_sentence_id": "validation_5156:d001:s000002",
+    "over_80": 2952
+  },
+  "phase1_length_feasibility": {
+    "requested_min_words": 200,
+    "max_words": 250,
+    "rows_total_words_under_requested_min": 72,
+    "rows_exact_capacity_under_requested_min": 72,
+    "extra_sentence_fragmentation_cases": 0,
+    "short_rows_max_sentences": 17,
+    "sentences_over_max_words": 100,
+    "rows_with_sentence_over_max_words": 44,
+    "policy": "clamp only to exact source-intrinsic capacity; candidate-induced shortfall fails"
+  },
+  "unicode_replacement": {
+    "rows": 72,
+    "characters": 1042,
+    "strict_validator_valid": false,
+    "allow_flag_diagnostic_valid": true,
+    "formal_inclusion_policy": "not_frozen"
+  },
+  "canonical_content_fingerprint": "765438735a96070b5b36c1576721bd7b63125c0ae5aaf917818052ea0a621b14",
+  "canonical_file_sha256": "0f403e8c1708a9f8e7259d118123be15765780cb0872a499d03b5260a05bc0b7",
+  "exclusion_manifest_sha256": "52a9fae3b20cd6f8bf529b761f2edc4143d888b76751dd0320c778375af7646b"
+}

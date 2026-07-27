@@ -235,7 +235,7 @@ def _coverage_guard_indices(
 def _resolve_min_per_route(
     value: int | Mapping[str, int],
     routes: List[str],
-    route_top_k: int,
+    configured_route_top_k: int,
 ) -> Dict[str, int]:
     if isinstance(value, Mapping):
         resolved = {route: 0 for route in routes}
@@ -251,10 +251,10 @@ def _resolve_min_per_route(
     for route, minimum in resolved.items():
         if minimum < 0:
             raise ValueError("min_per_route must be non-negative")
-        if minimum > route_top_k:
+        if minimum > configured_route_top_k:
             raise ValueError(
                 f"min_per_route for {route!r} ({minimum}) exceeds "
-                f"route_top_k ({route_top_k})"
+                f"configured route_top_k ({configured_route_top_k})"
             )
     return resolved
 
@@ -288,7 +288,12 @@ def build_candidate_pool(
             "route_proposals": {},
             "allocation": {
                 "route_top_k": 0,
+                "requested_route_top_k": int(k),
+                "effective_route_top_k": 0,
                 "min_per_route": {},
+                "requested_min_per_route": {},
+                "effective_min_per_route": {},
+                "reservation_shortfall_by_route": {},
                 "total_cap": total_budget,
                 "proposal_union_size": 0,
                 "candidate_universe_size": 0,
@@ -303,10 +308,10 @@ def build_candidate_pool(
     if rrf_constant < 1:
         raise ValueError("rrf_constant must be positive")
 
-    quota = int(k)
-    if quota < 1:
+    configured_quota = int(k)
+    if configured_quota < 1:
         raise ValueError("per-route candidate quota must be positive")
-    quota = min(quota, n)
+    quota = min(configured_quota, n)
     if total_budget is not None:
         total_budget = int(total_budget)
         if total_budget < 1:
@@ -349,9 +354,21 @@ def build_candidate_pool(
         route_proposal_sets[route] = proposals
         union_indices.update(proposals)
 
-    route_minimums = _resolve_min_per_route(
-        min_per_route, list(route_values), quota
+    requested_route_minimums = _resolve_min_per_route(
+        min_per_route, list(route_values), configured_quota
     )
+    # A reservation is a guarantee over evidence that actually exists, not a
+    # requirement that every document contain at least the configured number
+    # of sentences. Keep configuration validation tied to the configured
+    # route_top_k, then clamp each row to the proposals that route can supply.
+    route_minimums = {
+        route: min(requested_route_minimums[route], len(proposals))
+        for route, proposals in route_proposal_sets.items()
+    }
+    reservation_shortfalls = {
+        route: requested_route_minimums[route] - route_minimums[route]
+        for route in route_values
+    }
 
     fusion_scores = {
         index: sum(
@@ -502,7 +519,12 @@ def build_candidate_pool(
         "route_proposals": route_proposals,
         "allocation": {
             "route_top_k": quota,
+            "requested_route_top_k": configured_quota,
+            "effective_route_top_k": quota,
             "min_per_route": route_minimums,
+            "requested_min_per_route": requested_route_minimums,
+            "effective_min_per_route": route_minimums,
+            "reservation_shortfall_by_route": reservation_shortfalls,
             "total_cap": effective_cap,
             "proposal_union_size": len(union_indices),
             "coverage_guard_size": len(guard_reasons),

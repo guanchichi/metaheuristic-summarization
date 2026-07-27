@@ -1,9 +1,8 @@
-"""Dead-parameter audit for configs/*.yaml vs. src/pipeline/optimizer_dispatch.py.
+"""Effective-parameter audit for configs/*.yaml and the selection pipeline.
 
-This answers one narrow question: for the ``optimizer.method`` a config
-declares, which of its keys are actually read by the matching branch of
-``dispatch_optimizer()`` -- and which declared keys are dead weight because
-a *different* method's branch would read them instead?
+This answers one bounded question: for the ``optimizer.method`` a config
+declares, which selection-related keys can affect that run through either the
+shared objective factory, CLI governance, or the matching optimizer branch?
 
 This is a **read-only, non-blocking, reporting-only** check:
     * it does not modify configs/ or src/
@@ -12,22 +11,20 @@ This is a **read-only, non-blocking, reporting-only** check:
 
 Scope
 -----
-The key -> line-number map below (``METHOD_KEY_MAP``) was hand-transcribed
-by reading ``src/pipeline/optimizer_dispatch.py`` on 2026-07-27, branch by
-branch. It is the ground truth this script checks configs against; it is
-NOT re-derived from the configs or from any doc, per the project rule that
-evidence must come from the code, not from what configs or docs claim.
+The key -> source map below (``METHOD_KEY_MAP``) was hand-transcribed from
+``select_sentences.py``, ``objectives/factory.py``, and
+``optimizer_dispatch.py``. It is protected by regression tests because a
+branch-only map becomes stale whenever shared pipeline wiring changes.
 
-It only covers the config sections that ``dispatch_optimizer()`` itself
-reads: ``objectives.*``, ``optimizer.{pop_size,n_gen}``, top-level
+It covers selection/governance sections used by the formal entry point:
+``experiment.*``, ``objectives.*``, ``optimizer.{pop_size,n_gen}``, top-level
 ``seed``, ``bert.*``, ``fusion.*``, ``redundancy.lambda``, ``grasp.*``.
 Everything else in a config (``graph_params``, ``features``,
 ``representations``, ``candidates``, ``candidate_budget``, ``routes``,
 ``coverage_guard``, ``compute_budget``, ``selector``, ``length_control``,
 ...) is consumed by *other* modules (``feature_builder.py``,
 ``candidate_builder.py``, ``select_sentences.py``) and is intentionally
-out of scope here -- flagging it as "unread by optimizer_dispatch" would
-be misleading, since it was never meant to be read there.
+out of this bounded audit. A future schema gate must cover those sections.
 
 ``optimizer.method`` itself is deliberately excluded from the scoped-key
 checks: it is the dispatch key read by ``select_sentences.py`` to pick a
@@ -37,9 +34,8 @@ branch, not a leaf parameter any branch reads from within
 One key needs a special note: ``objectives.importance_aggregation`` is not
 read via a plain ``cfg.get()`` inside this file -- it arrives through
 ``objective_spec`` (built by ``src/objectives/factory.py`` from
-``cfg["objectives"]`` AND the input document's ``task_profile``), and only
-the ``nsga2`` branch consults ``objective_spec`` at all
-(optimizer_dispatch.py:96-98). The ``fast_nsga2`` branch never references
+``cfg["objectives"]`` AND the input document's ``task_profile``). Greedy,
+GRASP, and NSGA-II all consume that shared evaluator. The ``fast_nsga2`` branch never references
 ``objective_spec``, so this key is a silent no-op there even though
 ``fast_nsga2`` does wire up ``objectives.lambda_*``. Because the *default*
 that would actually apply also depends on data (whether the input document
@@ -66,8 +62,8 @@ import yaml
 
 
 # ---------------------------------------------------------------------------
-# Ground truth: which cfg keys does each dispatch_optimizer() branch read?
-# Hand-transcribed from src/pipeline/optimizer_dispatch.py, read 2026-07-27.
+# Ground truth: which cfg keys can affect each formal selection path?
+# Hand-transcribed from the pipeline/objective/dispatch call chain, read 2026-07-27.
 # If that file changes, re-read it and update this table by hand -- do not
 # regenerate it from configs or docs.
 #
@@ -75,36 +71,62 @@ import yaml
 # ---------------------------------------------------------------------------
 KeySpec = Tuple[str, str, str, str]
 
+SHARED_OBJECTIVE_KEYS: List[KeySpec] = [
+    (
+        "objectives.lambda_importance",
+        "1.0",
+        "src/objectives/factory.py:128",
+        "consumed through objective_spec and the shared evaluator",
+    ),
+    (
+        "objectives.lambda_coverage",
+        "0.8",
+        "src/objectives/factory.py:129",
+        "consumed through objective_spec and the shared evaluator",
+    ),
+    (
+        "objectives.lambda_redundancy",
+        "0.7",
+        "src/objectives/factory.py:130",
+        "consumed through objective_spec and the shared evaluator",
+    ),
+    (
+        "objectives.coverage_method",
+        "max",
+        "src/objectives/factory.py:107",
+        "consumed through objective_spec and the shared evaluator",
+    ),
+    (
+        "objectives.importance_aggregation",
+        "mean for profiled multi-sentence; sum for legacy_unprofiled",
+        "src/objectives/factory.py:44-55,101",
+        "effective default depends on the input task profile; see F-14",
+    ),
+]
+
+GLOBAL_SEED: KeySpec = (
+    "seed",
+    "None",
+    "src/pipeline/select_sentences.py:set_global_seed",
+    "the formal CLI seeds global RNGs before dispatch",
+)
+
 METHOD_KEY_MAP: Dict[str, List[KeySpec]] = {
     "greedy": [
-        # optimizer_dispatch.py:53-57 -- forwards only alpha/unit/max_sents,
-        # which are function *arguments* already resolved by the caller
-        # (select_sentences.py) before dispatch_optimizer() is invoked.
-        # This branch reads nothing from cfg itself.
+        *SHARED_OBJECTIVE_KEYS,
+        GLOBAL_SEED,
     ],
     "grasp": [
+        *SHARED_OBJECTIVE_KEYS,
         ("grasp.iters", "10", "optimizer_dispatch.py:63", ""),
         ("grasp.rcl_ratio", "0.3", "optimizer_dispatch.py:64", ""),
-        ("seed", "None", "optimizer_dispatch.py:65", ""),
+        GLOBAL_SEED,
     ],
     "nsga2": [
-        ("objectives.lambda_importance", "1.0", "optimizer_dispatch.py:87", ""),
-        ("objectives.lambda_coverage", "0.8", "optimizer_dispatch.py:88", ""),
-        ("objectives.lambda_redundancy", "0.7", "optimizer_dispatch.py:89", ""),
-        ("objectives.coverage_method", "max", "optimizer_dispatch.py:92", ""),
+        *SHARED_OBJECTIVE_KEYS,
         ("optimizer.pop_size", "100", "optimizer_dispatch.py:93", ""),
         ("optimizer.n_gen", "100", "optimizer_dispatch.py:94", ""),
-        ("seed", "None", "optimizer_dispatch.py:95", ""),
-        (
-            "objectives.importance_aggregation",
-            "sum",
-            "optimizer_dispatch.py:96-98",
-            "indirect: arrives via `objective_spec` built by "
-            "src/objectives/factory.py:35-113 from cfg['objectives'] AND "
-            "doc['task_profile']; the effective default depends on data "
-            "(legacy_unprofiled vs profiled), not just this config -- see "
-            "CODE_AUDIT_IEEE_Access.md F-14",
-        ),
+        GLOBAL_SEED,
     ],
     "bert": [
         (
@@ -119,6 +141,7 @@ METHOD_KEY_MAP: Dict[str, List[KeySpec]] = {
         ("bert.batch_size", "16", "optimizer_dispatch.py:111", ""),
         ("bert.max_model_tokens", "256", "optimizer_dispatch.py:112", ""),
         ("bert.revision", "None", "optimizer_dispatch.py:113", ""),
+        GLOBAL_SEED,
     ],
     "fast": [
         ("fusion.w_base", "0.5", "optimizer_dispatch.py:118", ""),
@@ -130,6 +153,7 @@ METHOD_KEY_MAP: Dict[str, List[KeySpec]] = {
             "fast_nsga2 branch accepts w_plm as an alias",
         ),
         ("redundancy.lambda", "0.7", "optimizer_dispatch.py:120", ""),
+        GLOBAL_SEED,
     ],
     "fast_grasp": [
         ("fusion.w_base", "0.5", "optimizer_dispatch.py:129", ""),
@@ -147,7 +171,7 @@ METHOD_KEY_MAP: Dict[str, List[KeySpec]] = {
             "default differs from the plain 'grasp' method's default of 10",
         ),
         ("grasp.rcl_ratio", "0.3", "optimizer_dispatch.py:137", ""),
-        ("seed", "None", "optimizer_dispatch.py:138", ""),
+        GLOBAL_SEED,
     ],
     "fast_nsga2": [
         ("fusion.w_base", "0.5", "optimizer_dispatch.py:143", ""),
@@ -168,7 +192,7 @@ METHOD_KEY_MAP: Dict[str, List[KeySpec]] = {
         ("objectives.lambda_redundancy", "0.7", "optimizer_dispatch.py:159", ""),
         ("optimizer.pop_size", "100", "optimizer_dispatch.py:160", ""),
         ("optimizer.n_gen", "100", "optimizer_dispatch.py:161", ""),
-        ("seed", "None", "optimizer_dispatch.py:162", ""),
+        GLOBAL_SEED,
         # NOTE: unlike nsga2, this branch (optimizer_dispatch.py:141-163)
         # never reads objectives.coverage_method and never references
         # objective_spec (so objectives.importance_aggregation is also a
@@ -189,26 +213,26 @@ KNOWN_INAPPLICABLE: Dict[str, List[Tuple[str, str]]] = {
     "fast_nsga2": [
         (
             "objectives.coverage_method",
-            "read on the 'nsga2' branch (optimizer_dispatch.py:92) but "
+            "consumed by the canonical shared evaluator, but "
             "'fast_nsga2' (optimizer_dispatch.py:141-163) never reads it",
         ),
         (
             "objectives.importance_aggregation",
-            "read on the 'nsga2' branch via objective_spec "
-            "(optimizer_dispatch.py:96-98); 'fast_nsga2' "
+            "consumed by canonical greedy/GRASP/NSGA-II via objective_spec; 'fast_nsga2' "
             "(optimizer_dispatch.py:141-163) never references "
             "objective_spec at all",
         ),
     ],
 }
 
-# Sections dispatch_optimizer() reads from, and which leaf keys under each
-# section are recognized by ANY method's branch. A leaf key present in a
+# Sections covered by this audit, and which leaf keys under each section are
+# recognized by ANY audited path. A leaf key present in a
 # config under one of these sections but NOT in this set is not read by
-# dispatch_optimizer() under any method currently coded -- most likely a
+# an audited path currently coded -- most likely a
 # typo (e.g. "pop_zise") or a parameter this script's map doesn't know
 # about yet.
 SCOPED_SECTIONS: Dict[str, set] = {
+    "experiment": {"status", "dataset"},
     "objectives": {
         "lambda_importance",
         "lambda_coverage",
@@ -226,6 +250,15 @@ SCOPED_SECTIONS: Dict[str, set] = {
     "grasp": {"iters", "rcl_ratio"},
 }
 TOP_LEVEL_SCALAR_KEYS = {"seed"}
+
+# These keys gate data access and dataset identity before selector dispatch.
+# They are optional for legacy reproduction configs, so they should not appear
+# in the "missing -> default" section, but declarations must never be reported
+# as dead parameters.
+ALWAYS_CONSUMED_IF_DECLARED = {
+    "experiment.status",
+    "experiment.dataset",
+}
 
 # Keys under a scoped section that are known and fine to declare but are
 # deliberately never checked here -- not typos, just out of scope for this
@@ -275,6 +308,8 @@ def audit_config(path: str) -> Dict[str, Any]:
         for leaf in node:
             dotted = f"{section}.{leaf}"
             if dotted in EXCLUDED_KEYS:
+                continue
+            if dotted in ALWAYS_CONSUMED_IF_DECLARED:
                 continue
             if dotted in read_paths:
                 continue
@@ -404,7 +439,7 @@ def main() -> None:
         print(json.dumps(reports, indent=2, ensure_ascii=False))
     else:
         print(
-            "config-key dead-parameter audit (report-only; does not modify "
+            "config-key effective-parameter audit (report-only; does not modify "
             "anything, always exits 0)\n"
         )
         for report in reports:

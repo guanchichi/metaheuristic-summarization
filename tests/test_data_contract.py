@@ -93,6 +93,7 @@ def test_dataset_health_report_contains_streaming_statistics(monkeypatch):
     assert report["valid"] is True
     assert report["health"]["documents_per_example"] == {1: 1}
     assert report["health"]["references_per_example"] == {2: 1}
+    assert report["health"]["sentences_per_example"]["under_20"] == 1
     assert report["health"]["sentence_words"]["max"] == 2
     assert report["health"]["unicode_replacement_characters"] == 0
 
@@ -136,3 +137,35 @@ def test_dataset_validator_enforces_pinned_revision(monkeypatch):
     )
     assert report["valid"] is False
     assert "actual-revision" in report["errors"][0]["error"]
+
+
+def test_policy_error_does_not_remove_row_from_health_denominators(monkeypatch):
+    example = build_document_example(
+        example_id="damaged-row",
+        split="validation",
+        documents=[["A damaged \ufffd sentence."]],
+        references=["Reference."],
+        input_mode="single_document",
+        output_mode="multi_sentence",
+        dataset_name="fixture",
+    )
+    monkeypatch.setattr(
+        "src.data.validate_dataset.read_jsonl",
+        lambda _path: iter([example]),
+    )
+
+    strict = validate_jsonl("damaged.jsonl", expected_split="validation")
+    assert strict["valid"] is False
+    assert strict["health"]["structurally_valid_rows"] == 1
+    assert strict["health"]["split_counts"] == {"validation": 1}
+    assert strict["documents"] == 1
+    assert strict["sentences"] == 1
+    assert strict["health"]["unicode_replacement_rows"] == 1
+
+    allowed = validate_jsonl(
+        "damaged.jsonl",
+        expected_split="validation",
+        allow_replacement_character=True,
+    )
+    assert allowed["valid"] is True
+    assert allowed["health"]["structurally_valid_rows"] == 1

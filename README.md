@@ -114,10 +114,23 @@ python -m src.data.preprocess_multinews --split validation \
   --out data/processed/multi_news_validation_canonical.jsonl
 python -m src.data.validate_dataset \
   --input data/processed/multi_news_validation_canonical.jsonl \
-  --split validation --expected_rows 5622 \
+  --split validation --expected_rows 5621 \
   --expected_dataset_revision 1f20a01dbf6463236108a8d7fd39f3ae9750dcc3 \
-  --report_out data/processed/multi_news_validation_health.json
+  --report_out data/processed/multi_news_validation_health_strict.json
 ```
+
+Pinned validation 原始 5,622 列中有 1 列是空來源，故 canonical 輸出固定為
+5,621 列並另寫 exclusion manifest。strict validator 會因其中 72 列含 U+FFFD
+而失敗；這是尚待凍結的資料政策 gate，不得為了開跑而直接加
+`--allow_replacement_character`。完整可重現統計見
+`docs/research/evidence/multinews_validation_health_summary.json`。
+
+Phase 1 的 requested `min_words=200` 會逐列依句子不可切割及 250-word
+上限計算 exact source capacity；只有全文本身不可達時才產生較小的
+`effective_min_words`，並把 requested/effective/capacity/reason 寫入 prediction。
+完整 validation 有 72 列適用此規則。若全文可達但 hard candidate pool
+不可達，run 會直接失敗；單句超過 active output budget 者亦不會占用
+route top-K 或 candidate quota，而會留下 exclusion evidence。
 
 Phase 1 Multi-News validation MVP（第一次會下載 pinned sentence encoder；不可先跑 test）：
 

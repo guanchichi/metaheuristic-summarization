@@ -91,9 +91,9 @@ greedy reference 不是 official oracle、未做 paired test。新 validation pi
 - ⚠️ pred 與 ref **必須用同一個函式分句**。原始換行是雜訊不是句界
   （370/500 predictions 含雜訊換行，references 一個都沒有；不一致會低估 ~0.023）
 
-### 已套用 patch；合併前仍需測試
+### 已套用並通過 regression tests
 
-以下 patch 的方向正確。`pytest` 已加入 `requirements.txt`，`tests/` 目前 156 項全過；
+以下 patch 已接線。`pytest` 已加入依賴，`tests/` 目前 189 項全過；
 SciTLDR 官方 conformance 尚未通過；它只在決定保留 optional stress test 時才是必要驗收，不阻塞 GovReport + Multi-News 主線：
 
 | 檔案 | 修正 |
@@ -103,8 +103,8 @@ SciTLDR 官方 conformance 尚未通過；它只在決定保留 optional stress 
 | `src/models/extractive/encoder_rank.py` | 完整輸入 batch encode、模型快取、pinned revision、截斷率與 deterministic cost facts；CPU 與 3-row pipeline smoke 已過，正式 cold/warm/GPU cost pilot 待做 |
 | `src/pipeline/optimizer_dispatch.py` | `pop_size`/`n_gen`/`seed` 接線；**移除靜默 fallback** |
 | `src/objectives/factory.py`、`evaluator.py` | single-sentence 關閉 subset search；Greedy／GRASP／NSGA-II 共用同一 objective 與 feasibility contract，並保存 Pareto front。**raw-sum 禁令只涵蓋「有 `task_profile` 且 `output_mode=multi_sentence`」的路徑**（`factory.py:87-92`）；沒有 `task_profile` 的 legacy_unprofiled 路徑（`factory.py:44-57`）預設仍是 `sum`，見 `docs/research/CODE_AUDIT_IEEE_Access.md` F-14。group coverage 與最終 Pareto policy 尚待完成 |
-| `src/pipeline/candidate_builder.py` | `route_top_k` 只定義 proposals、`min_per_route` 保留 route-specific evidence、RRF 只在 union/guard 內填 total cap；輸出完整 proposal/allocation artifact |
-| `src/pipeline/select_sentences.py` | MVP selector 明確使用 normalized RRF salience；membership-only 只作可消融對照，不再把 semantic provenance 收集後丟棄 |
+| `src/pipeline/candidate_builder.py` | `route_top_k` 只定義 proposals、`min_per_route` 保留 route-specific evidence、RRF 只在 union/guard 內填 total cap；短文件保存 requested/effective reservation 與 shortfall，不再中止整批 run |
+| `src/pipeline/select_sentences.py` | MVP selector 明確使用 normalized RRF salience；`validation_pilot_only` 在 runtime 禁止 test split 並核對 canonical dataset identity；`min_words` 只在完整來源本身不可達時以 exact capacity 逐列調降，candidate-induced infeasibility 仍 fail loud，超過 active output budget 的句子不得消耗 candidate quota |
 | `src/eval/oracle.py` | 新增 greedy oracle reference；不是 exact upper bound。SciTLDR official oracle 僅在保留 optional stress test 時實作／重現 |
 
 - 🚫 **絕對不要再加 `except Exception: fallback to greedy`**。研究模式必須 fail loud

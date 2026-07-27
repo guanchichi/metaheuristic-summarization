@@ -75,9 +75,9 @@ length_control:
   unit: words
   max_words: 250
   # Provisional validation band to prevent mean-salience from collapsing to a
-  # one-sentence summary. Freeze or revise this on validation, never on test.
+  # one-sentence summary. Per document, the applied lower bound is clamped to
+  # the exact source-attainable capacity under the upper constraints and both
+  # requested/effective values are recorded. Candidate-induced shortfalls are
+  # errors, not another silent clamp. Freeze or revise on validation, not test.
   min_words: 200
   require_nonempty: true
-
-redundancy:
-  lambda: 0.7

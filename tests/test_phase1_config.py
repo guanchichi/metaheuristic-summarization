@@ -2,6 +2,10 @@
 
 from pathlib import Path
 
+import pytest
+
+from src.data.schemas import build_document_example
+from src.pipeline.select_sentences import summarize_one, validate_experiment_request
 from src.utils.io import load_yaml
 
 
@@ -27,3 +31,43 @@ def test_phase1_mvp_config_keeps_budgets_and_routes_explicit():
     assert cfg["routes"]["semantic"]["revision"] != "main"
     assert len(cfg["routes"]["semantic"]["revision"]) == 40
     assert cfg["optimizer"]["method"] == "greedy"
+
+
+def _phase1_config():
+    return load_yaml(str(ROOT / "configs" / "phase1_mvp_multinews.yaml"))
+
+
+def _canonical_row(*, split="validation", dataset_name="Multi-News"):
+    return build_document_example(
+        example_id=f"{split}-row",
+        split=split,
+        documents=[["One source sentence."]],
+        references=["Reference."],
+        input_mode="multi_document",
+        output_mode="multi_sentence",
+        dataset_name=dataset_name,
+        metadata={"n_source_documents": 1},
+    )
+
+
+def test_validation_pilot_config_rejects_test_before_running():
+    cfg = _phase1_config()
+    with pytest.raises(ValueError, match="may only access the validation split"):
+        validate_experiment_request(cfg, "test")
+    with pytest.raises(ValueError, match="may only access the validation split"):
+        summarize_one(_canonical_row(split="test"), cfg)
+
+
+def test_validation_pilot_requires_canonical_matching_dataset():
+    cfg = _phase1_config()
+    with pytest.raises(ValueError, match="canonical rows"):
+        summarize_one({"id": "legacy", "sentences": ["Sentence."]}, cfg)
+    with pytest.raises(ValueError, match="does not match"):
+        summarize_one(_canonical_row(dataset_name="Other Dataset"), cfg)
+
+
+def test_unknown_experiment_status_fails_closed():
+    cfg = _phase1_config()
+    cfg["experiment"]["status"] = "typo"
+    with pytest.raises(ValueError, match="unknown experiment.status"):
+        validate_experiment_request(cfg, "validation")

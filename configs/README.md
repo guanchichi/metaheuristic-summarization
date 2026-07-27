@@ -84,6 +84,7 @@ python -m src.pipeline.select_sentences \
 
 | 鍵 | 說明 |
 |---|---|
+| `experiment.status / dataset` | `validation_pilot_only` 只允許 canonical validation rows，且 dataset identity 必須一致；目前其他 status 一律 fail closed |
 | `objectives.lambda_*` | 從 Pareto front 選解時的加權（importance / coverage / redundancy） |
 | `objectives.coverage_method` | `max`（預設）/ `set` / `diversity` |
 | `features.weights.*` | 各特徵在 base score 的權重 |
@@ -91,10 +92,11 @@ python -m src.pipeline.select_sentences \
 | `graph_params.threshold` | 圖的邊剪枝閾值 τ |
 | `candidates.k` / `sources` / `mode` | 候選池大小、來源（`score`/`position`/`centrality`/`graph`）、`hard`/`soft` |
 | `candidate_budget.route_top_k` | 每 route 保存與分析的 proposal depth；不是最終池保證配額 |
-| `candidate_budget.min_per_route` | total cap 前優先保留的 route evidence；先保留 route-exclusive proposals 以免 RRF 共識偏誤抹除 unique contribution |
+| `candidate_budget.min_per_route` | total cap 前優先保留的 route evidence；全域值不得大於 configured `route_top_k`，短文件逐列 clamp 並在 artifact 保存 requested/effective/shortfall |
 | `candidate_budget.total` | selector pool 的上限，不從 proposal union／coverage guard 外補句；union 小於上限時允許誠實 underfill |
 | `selector.salience_source` | `rrf_fusion` 會把 normalized provenance fusion 實際送入 selector；`membership_only` 僅供消融 |
 | `compute_budget.mode / enabled_routes` | 目前只實作 validation-frozen `fixed`；宣告 `adaptive` 會直接失敗 |
+| `length_control.min_words` | requested lower bound；逐文件依完整來源在 `max_words/max_sentences` 下的精確可達上限產生 `effective_min_words`。只有 source-intrinsic shortfall 可調降；candidate pool 若達不到 effective bound 必須報錯。兩者與 relaxation reason 均寫入 artifact |
 | `routes.semantic.*` | sentence encoder 名稱、固定 revision、batch size、`max_model_tokens`；輸出記錄實際 revision 與截斷率 |
 | `routes.graph.*` | 新 graph route 預設 `sparse_knn`；`dense_legacy` 必須明確指定 |
 | `coverage_guard.*` | document／section／position strata 保留規則，不屬於語意 route |

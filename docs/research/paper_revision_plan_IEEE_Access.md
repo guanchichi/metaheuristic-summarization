@@ -480,7 +480,7 @@ Reviewer #4 的判斷基本正確：NSGA-II、centroid PLM ranking、thresholded
 
    Phase 1e 已完成工程前提：Greedy、GRASP、NSGA-II 現在共用同一 salience／facility coverage／redundancy evaluator 與 non-empty／min-max length constraints，final evaluation 與 NSGA-II Pareto front 會寫入 artifact。這只是 correctness，不代表 NSGA-II 已證明有效；MMR、exact small-instance gap 與 paired validation comparison 仍未完成。
 
-   新 shared objective 的 3-row correctness smoke 也揭露：若 multi-sentence mean-salience 只有 max budget、沒有 lower length bound，deterministic greedy 三筆皆退化為單句（41–88 words）。因此 Multi-News MVP 暫以 200–250 words 作 length-matched validation band；此值仍須在 validation 凍結，不能依 test 表現選擇。這個結果再次說明「修正公式」不等於「效果自然會變好」。
+   新 shared objective 的 3-row correctness smoke 也揭露：若 multi-sentence mean-salience 只有 max budget、沒有 lower length bound，deterministic greedy 三筆皆退化為單句（41–88 words）。因此 Multi-News MVP 暫以 requested 200–250 words 作 length-matched validation band；逐列 effective minimum 只能在完整來源於相同 upper constraints 下本身不可達時調降，且 requested/effective/source capacity/reason 全部保存。全文可達但 candidate pool 不可達時必須報錯，不能以第二次 clamp 掩蓋候選設計缺陷。此值與 objective form 仍須在 validation 凍結，不能依 test 表現選擇。這個結果再次說明「修正公式」不等於「效果自然會變好」。
 
 6. Explicit Pareto output policy  
    不再把 Pareto front 最後任意 scalarize。預先固定 knee point、reference point 或使用者偏好；報整個 front 的 hypervolume 與穩定性。
@@ -540,13 +540,15 @@ Document record：
 - references 為 list，不是單一任意串接字串。
 - preprocessing metadata。
 
-實作狀態（2026-07-26）：已建立 canonical schema 與 pinned Multi-News preprocessor，保存 source order、raw document/sentence hash、字元 span 與 cleaned-to-original mapping；完整 train/validation/test artifact 與 health manifest 尚待生成，因此舊 flat JSONL 仍不可用於正式結果。
+實作狀態（2026-07-27）：已建立 canonical schema 與 pinned Multi-News preprocessor，保存 source order、raw document/sentence hash、字元 span 與 cleaned-to-original mapping。完整 validation 已由固定 revision 生成：5,622 raw rows 中 1 列空來源被排除，得到 5,621 canonical rows；strict health gate 因 72 列共 1,042 個 U+FFFD 而維持失敗。這些 damaged rows 的納入／排除與 sensitivity policy 尚未 freeze，因此舊 flat JSONL 與 `--allow_replacement_character` 輸出都不可直接作正式主結果。摘要證據保存於 `docs/research/evidence/multinews_validation_health_summary.json`；train/test 與其他資料集仍待生成。
 
-同日已將 provenance 接入 production selector：candidate artifact 保存各 route 的 raw score、完整 rank、percentile、top-K proposals、route agreement、normalized RRF fusion、reservation/inclusion reason、model revision、截斷統計與 deterministic cost facts；MVP selector 實際使用 normalized RRF salience，prediction 亦保存每個 selected sentence 的 selection evidence。正式 semantic route 現已在完整輸入上 batch encode 後排名，graph route 預設改為有界 sparse TF-IDF kNN。`route_top_k`、`min_per_route` 與 total cap 分開；route-exclusive evidence/guards 優先保留，RRF 不得從 proposal union/guards 外補句。這些是 correctness contract 已完成，不代表 route utility 已被實驗證實；正式 cost pilot、unique recall 與 quality ablation 仍是 freeze 前必要條件。
+同日已將 provenance 接入 production selector：candidate artifact 保存各 route 的 raw score、完整 rank、percentile、top-K proposals、route agreement、normalized RRF fusion、reservation/inclusion reason、model revision、截斷統計與 deterministic cost facts；MVP selector 實際使用 normalized RRF salience，prediction 亦保存每個 selected sentence 的 selection evidence。正式 semantic route 現已在完整輸入上 batch encode 後排名，graph route 預設改為有界 sparse TF-IDF kNN。`route_top_k`、`min_per_route` 與 total cap 分開；route-exclusive evidence/guards 優先保留，RRF 不得從 proposal union/guards 外補句。短文件不再因句數少於 configured reservation 而中止：設定層仍驗證 `min_per_route <= route_top_k`，逐列則保存 requested/effective reservation 與 shortfall。這些是 correctness contract 已完成，不代表 route utility 已被實驗證實；正式 cost pilot、unique recall 與 quality ablation 仍是 freeze 前必要條件。
 
 2026-07-26 correctness smoke：pinned `all-MiniLM-L6-v2@c9745ed...` 已在 CPU 直接 encode 並正確回報刻意截斷；其後以 canonical Multi-News validation 3-row debug subset 端到端處理 399 句。修正 membership-only 缺陷後，三列 final pool 為 55／60／60（第一列 proposal union 僅 55，誠實 underfill 5），union/guard 外候選為 0，selector salience 與 normalized RRF mismatch 為 0，且三列選句都相對舊 smoke 改變。此 run 只證明 wiring/artifact contract，不是 validation quality pilot；3-row ROUGE 不得寫入論文結果。
 
-Phase 1e shared-objective smoke 先以 `min_words=0` 重跑，三列皆退化為單句（51／88／41 words），證明 mean-salience 不能只搭配 max budget。改用暫定 200–250 word validation band 後，三列長度落在 246／238／248 words。後續 strict audit 又發現 facility coverage 曾只覆蓋 candidate pool；拆成 `full source × candidates` coverage 與 `candidates × candidates` redundancy matrix 後，coverage universe 正確為 80／227／92 句，最終選取 5／4／7 句、246／240／248 words，全部 feasibility 為 true，candidate union/guard 越界與 RRF mismatch 均為 0。這只驗證 contract 與長度退化已受控；200 仍是待 validation freeze 的 provisional 下限，三列品質不能當效果證據。
+Phase 1e shared-objective smoke 先以 `min_words=0` 重跑，三列皆退化為單句（51／88／41 words），證明 mean-salience 不能只搭配 max budget。改用暫定 200–250 word validation band 後，三列長度落在 246／238／248 words。後續 strict audit 又發現 facility coverage 曾只覆蓋 candidate pool；拆成 `full source × candidates` coverage 與 `candidates × candidates` redundancy matrix 後，coverage universe 正確為 80／227／92 句，最終選取 5／4／7 句、246／240／248 words，全部 feasibility 為 true，candidate union/guard 越界與 RRF mismatch 均為 0。這只驗證 contract 與長度退化已受控；200 仍是待 validation freeze 的 provisional requested 下限，三列品質不能當效果證據。
+
+完整 canonical validation 的 length-feasibility audit 顯示：72/5,621 列（1.28%）全文不足 requested `min_words=200`；在句子不可切割與 `max_words=250` 下做 exact attainable-capacity 計算後仍恰為同 72 列，沒有額外 fragmentation case，且這 72 列最多只有 17 句，不受目前 candidate cap 40/60 截斷。正式 contract 因此保留這些官方 rows，僅將其 effective minimum 調為 source capacity。另有 100 句（44 列）單句超過 250 words，包含 `validation_5156:d001:s000002` 的 2,638-word 極端值；它們保留於 canonical data 與 coverage universe，但在 route top-K 前標為 selection-ineligible，不能浪費候選 quota，也不能未經 policy freeze 擅自重切句。
 
 Candidate record：
 
@@ -572,7 +574,7 @@ Prediction record：
 
 ### 4.5 測試最低門檻
 
-現有 tests 主要檢查「有輸出」與 index range，不足以驗證研究正確性；requirements 甚至沒有 pytest。
+初始稽核時，tests 主要只檢查「有輸出」與 index range，requirements 也沒有 pytest；以下缺口必須逐項以獨立證據關閉。
 
 必補：
 
@@ -589,7 +591,7 @@ Prediction record：
 - full toy pipeline snapshot test。
 - dataset schema/fingerprint tests。
 
-2026-07-27 狀態：TF-ISF v1/v2、length、position v1/v2 與內部 ROUGE protocol 的 hand-calculated golden 已完成；golden audit 同時促使 TF-ISF v2 從可能產生負 ubiquitous-term 權重的 legacy smoothing，修正為非負 `log((N+1)/(sf+1))`。`rougeL`／`rougeLsum`、對稱分句及 max-ROUGE-1 same-reference policy 已釘住；TF-IDF/TF-ISF similarity parity、official `files2rouge` 數值 conformance（僅保留 SciTLDR 時）與 full toy snapshot 仍未完成。
+2026-07-27 狀態：TF-ISF v1/v2、length、position v1/v2 與內部 ROUGE protocol 的 hand-calculated golden 已完成；golden audit 同時促使 TF-ISF v2 從可能產生負 ubiquitous-term 權重的 legacy smoothing，修正為非負 `log((N+1)/(sf+1))`。`rougeL`／`rougeLsum`、對稱分句及 max-ROUGE-1 same-reference policy 已釘住；10-document full toy snapshot、短文件 reservation、similarity fail-loud 與 runtime validation/test-lock regression 亦已完成。TF-IDF/TF-ISF similarity parity 與 official `files2rouge` 數值 conformance（僅保留 SciTLDR 時）仍未完成。
 
 品質 gate：
 

@@ -14,6 +14,74 @@ from src.objectives.factory import aggregate_importance
 from src.utils.tokenizer import count_tokens
 
 
+def maximum_feasible_words(
+    sentences: Sequence[str],
+    *,
+    max_length: Optional[int],
+    length_unit: str,
+    max_sentences: Optional[int] = None,
+) -> int:
+    """Return the exact largest attainable word count under upper bounds.
+
+    Extractive sentences are indivisible, so ``min(requested, total_words)``
+    is not a sufficient feasibility check.  For word/token budgets this uses
+    a bounded subset-sum bitset; for a sentence-only budget, taking the longest
+    allowed sentences is exact.  ``tokens`` intentionally follows the current
+    pipeline contract where output tokens are whitespace-delimited words.
+    """
+
+    unit = str(length_unit).lower()
+    if unit not in {"words", "tokens", "sentences"}:
+        raise ValueError(f"unknown length unit: {length_unit!r}")
+    if max_length is not None and int(max_length) < 1:
+        raise ValueError("max_length must be positive when declared")
+    if max_sentences is not None and int(max_sentences) < 1:
+        raise ValueError("max_sentences must be positive when declared")
+
+    lengths = [count_tokens(sentence) for sentence in sentences]
+    if not lengths:
+        return 0
+
+    sentence_cap = None if max_sentences is None else int(max_sentences)
+    if unit == "sentences":
+        unit_cap = None if max_length is None else int(max_length)
+        sentence_cap = (
+            unit_cap
+            if sentence_cap is None
+            else sentence_cap if unit_cap is None else min(sentence_cap, unit_cap)
+        )
+        if sentence_cap is None:
+            return sum(lengths)
+        return sum(sorted(lengths, reverse=True)[:sentence_cap])
+
+    if max_length is None:
+        if sentence_cap is None:
+            return sum(lengths)
+        return sum(sorted(lengths, reverse=True)[:sentence_cap])
+
+    word_cap = min(int(max_length), sum(lengths))
+    mask = (1 << (word_cap + 1)) - 1
+    eligible_lengths = [length for length in lengths if length <= word_cap]
+    if sentence_cap is None:
+        reachable = 1
+        for length in eligible_lengths:
+            reachable = (reachable | (reachable << length)) & mask
+        return reachable.bit_length() - 1
+
+    sentence_cap = min(sentence_cap, len(eligible_lengths))
+    reachable_by_count = [0] * (sentence_cap + 1)
+    reachable_by_count[0] = 1
+    for length in eligible_lengths:
+        for count in range(sentence_cap, 0, -1):
+            reachable_by_count[count] |= (
+                reachable_by_count[count - 1] << length
+            ) & mask
+    reachable = 0
+    for values in reachable_by_count:
+        reachable |= values
+    return reachable.bit_length() - 1
+
+
 @dataclass(frozen=True)
 class ObjectiveWeights:
     salience: float = 1.0

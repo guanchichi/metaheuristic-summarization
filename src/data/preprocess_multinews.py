@@ -230,7 +230,7 @@ def process_example(
         sentence_metadata.append(mapping)
         document_metadata.append(
             {
-                "original_document_position": source_order,
+                "original_document_position": source_document["raw_segment_position"],
                 "raw_segment_position": source_document["raw_segment_position"],
                 "source_char_start": source_document["source_char_start"],
                 "source_char_end": source_document["source_char_end"],

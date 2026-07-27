@@ -9,7 +9,25 @@ from src.objectives.evaluator import (
     ObjectiveWeights,
     SelectionConstraints,
     SelectionObjective,
+    maximum_feasible_words,
 )
+
+
+def test_maximum_feasible_words_respects_indivisible_sentences():
+    sentences = ["x " * 130, "y " * 130]
+    assert maximum_feasible_words(
+        sentences, max_length=250, length_unit="words"
+    ) == 130
+
+
+def test_maximum_feasible_words_respects_sentence_cap():
+    sentences = ["x " * 100, "y " * 90, "z " * 80]
+    assert maximum_feasible_words(
+        sentences,
+        max_length=250,
+        length_unit="words",
+        max_sentences=2,
+    ) == 190
 
 
 def _golden_evaluator(**constraint_overrides):

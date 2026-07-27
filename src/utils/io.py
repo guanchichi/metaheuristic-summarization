@@ -56,18 +56,15 @@ def read_jsonl(path: str) -> Iterable[Dict[str, Any]]:
 def set_global_seed(seed: Optional[int]) -> None:
     if seed is None:
         return
+    import random
+    import numpy as np
+
+    random.seed(seed)
+    np.random.seed(seed)
     try:
-        import random, numpy as np
-
-        random.seed(seed)
-        np.random.seed(seed)
-        try:
-            import torch
-
-            torch.manual_seed(seed)
-            if torch.cuda.is_available():
-                torch.cuda.manual_seed_all(seed)
-        except Exception:
-            pass
-    except Exception:
-        pass
+        import torch
+    except ImportError:
+        return
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
