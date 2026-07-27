@@ -478,8 +478,14 @@ Reviewer #4 的判斷基本正確：NSGA-II、centroid PLM ranking、thresholded
 5. Selector competition  
    在完全相同 candidate、feature、budget 下比較 greedy、MMR、GRASP、NSGA-II；小實例另以 exhaustive/ILP 解驗證 optimality gap。NSGA-II 只有在 quality-cost、hypervolume 或可控 trade-off 上穩定勝出才成為主方法，否則降為比較組。
 
+   Phase 1e 已完成工程前提：Greedy、GRASP、NSGA-II 現在共用同一 salience／facility coverage／redundancy evaluator 與 non-empty／min-max length constraints，final evaluation 與 NSGA-II Pareto front 會寫入 artifact。這只是 correctness，不代表 NSGA-II 已證明有效；MMR、exact small-instance gap 與 paired validation comparison 仍未完成。
+
+   新 shared objective 的 3-row correctness smoke 也揭露：若 multi-sentence mean-salience 只有 max budget、沒有 lower length bound，deterministic greedy 三筆皆退化為單句（41–88 words）。因此 Multi-News MVP 暫以 200–250 words 作 length-matched validation band；此值仍須在 validation 凍結，不能依 test 表現選擇。這個結果再次說明「修正公式」不等於「效果自然會變好」。
+
 6. Explicit Pareto output policy  
    不再把 Pareto front 最後任意 scalarize。預先固定 knee point、reference point 或使用者偏好；報整個 front 的 hypervolume 與穩定性。
+
+   現行程式的 `weighted_sum_on_shared_objectives` 僅是 provisional engineering policy；必須在 validation 改為並凍結預先指定的 policy，否則不可作 test 或論文主結果。
 
 7. Regime-aware objectives  
    單句任務不得保留無意義的 redundancy objective；多文件加入 document coverage，長文件加入 section/topic coverage。objective 啟用條件是方法定義的一部分，不是 dataset-specific 偷調權重。
@@ -540,6 +546,8 @@ Document record：
 
 2026-07-26 correctness smoke：pinned `all-MiniLM-L6-v2@c9745ed...` 已在 CPU 直接 encode 並正確回報刻意截斷；其後以 canonical Multi-News validation 3-row debug subset 端到端處理 399 句。修正 membership-only 缺陷後，三列 final pool 為 55／60／60（第一列 proposal union 僅 55，誠實 underfill 5），union/guard 外候選為 0，selector salience 與 normalized RRF mismatch 為 0，且三列選句都相對舊 smoke 改變。此 run 只證明 wiring/artifact contract，不是 validation quality pilot；3-row ROUGE 不得寫入論文結果。
 
+Phase 1e shared-objective smoke 先以 `min_words=0` 重跑，三列皆退化為單句（51／88／41 words），證明 mean-salience 不能只搭配 max budget。改用暫定 200–250 word validation band 後，三列長度落在 246／238／248 words。後續 strict audit 又發現 facility coverage 曾只覆蓋 candidate pool；拆成 `full source × candidates` coverage 與 `candidates × candidates` redundancy matrix 後，coverage universe 正確為 80／227／92 句，最終選取 5／4／7 句、246／240／248 words，全部 feasibility 為 true，candidate union/guard 越界與 RRF mismatch 均為 0。這只驗證 contract 與長度退化已受控；200 仍是待 validation freeze 的 provisional 下限，三列品質不能當效果證據。
+
 Candidate record：
 
 - document_id、original_sentence_index、text hash。
@@ -580,6 +588,8 @@ Prediction record：
 - NSGA-II parameter propagation、seed determinism、no-fallback tests。
 - full toy pipeline snapshot test。
 - dataset schema/fingerprint tests。
+
+2026-07-27 狀態：TF-ISF v1/v2、length、position v1/v2 與內部 ROUGE protocol 的 hand-calculated golden 已完成；golden audit 同時促使 TF-ISF v2 從可能產生負 ubiquitous-term 權重的 legacy smoothing，修正為非負 `log((N+1)/(sf+1))`。`rougeL`／`rougeLsum`、對稱分句及 max-ROUGE-1 same-reference policy 已釘住；TF-IDF/TF-ISF similarity parity、official `files2rouge` 數值 conformance（僅保留 SciTLDR 時）與 full toy snapshot 仍未完成。
 
 品質 gate：
 

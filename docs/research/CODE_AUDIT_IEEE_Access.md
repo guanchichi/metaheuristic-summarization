@@ -676,16 +676,16 @@ imp = np.sum(self.importance[idx])      # 未正規化的總和
 
 ## 附錄 A：本次已直接修改的程式碼
 
-以下 patch 已套用；驗證程度分開記錄。pytest 目前尚未安裝，所以不能宣稱整批「驗證通過」。
-其餘較大的變更（Sentence-BERT 接線、baseline 模組、分句改用 NLTK）留給你決定後再動。
+以下是初次 audit patch 與目前 Phase 1 狀態的對照。pytest 已安裝，現有 **156 tests 全過**；這只代表 correctness regression 與內部 hand-calculated golden 通過，不代表方法效果或 official evaluator parity 已通過。
+Sentence-BERT production route、canonical NLTK segmentation 與 shared objective/selector contract 已接線；baseline 模組與正式 validation 仍未完成。
 
 | 檔案 | 修改內容 | 對應發現 | 驗證 |
 |---|---|---|---|
-| `src/eval/rouge.py` | ROUGE-Lsum；同一 reference 由最大 R1 選定；長度 mismatch fail；保留 legacy evaluator | F-2, F-8 | ✅ 兩個 5622 篇 artifacts 已重現 0.3857／0.3880；✅ aggregation smoke；⏳ official files2rouge conformance/pytest |
+| `src/eval/rouge.py` | ROUGE-Lsum；同一 reference 由最大 R1 選定；長度 mismatch fail；保留 legacy evaluator | F-2, F-8 | ✅ 兩個 5622 篇 artifacts 已重現 0.3857／0.3880；✅ regression tests；⏳ official files2rouge conformance（僅保留 SciTLDR 時） |
 | `src/eval/oracle.py` | greedy oracle reference CLI；已更正不得稱 exact upper bound，`max_words` 明確化 | F-1 | ✅ CLI/smoke；⏳ SciTLDR official single-sentence 52.4 conformance |
 | `src/features/graph.py` | thresholding 前先 `.copy()`，不再就地竄改呼叫端矩陣 | F-5 | ✅ 呼叫前後矩陣一致 |
-| `src/models/extractive/encoder_rank.py` | 新增 `load_encoder()` 模型快取與 `clear_encoder_cache()` | F-4 | ✅ 匯入；⏳ 多文件 cache、CPU/GPU 與效能 regression |
-| `src/pipeline/optimizer_dispatch.py` | `pop_size` / `n_gen` / `seed` 接線；移除靜默 fallback；`w_plm` 僅作命名過渡，Stage 2 仍是 TF-IDF | F-6, F-13f, F-3 | ✅ small deterministic smoke；⏳ pytest/完整 pipeline regression |
+| `src/models/extractive/encoder_rank.py` | 模型快取、pinned revision、完整輸入 batch encode、截斷與成本 artifact | F-4 | ✅ CPU 與 3-row canonical smoke；⏳ 正式 cold/warm/GPU cost pilot |
+| `src/pipeline/optimizer_dispatch.py`、`src/objectives/evaluator.py` | `pop_size` / `n_gen` / `seed` 接線；移除 fallback；Greedy／GRASP／NSGA-II 共用 objective/constraints，保存 Pareto front | F-6, F-13f, F-3, F-7 | ✅ hand-computed、seed、no-fallback、pipeline regression；⏳ MMR/exact baseline 與 validation isolation |
 
 **執行 greedy reference 的指令**（例：Multi-News，245 whitespace-word 預算）
 

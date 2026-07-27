@@ -86,14 +86,14 @@ greedy reference 不是 official oracle、未做 paired test。新 validation pi
 
 ### 評測
 
-- ⚠️ 多句資料暫用 `src/eval/rouge.py` 的 ROUGE-Lsum；正式 protocol 尚需 golden tests 與文獻 evaluator 對齊
+- ⚠️ 多句資料暫用 `src/eval/rouge.py` 的 ROUGE-Lsum；內部 hand-calculated golden tests 已完成，正式 protocol 仍需與文獻 evaluator 對齊
 - 多句摘要的新內部協定使用 `rougeLsum`；`rouge_scores_legacy()` 只保留重現舊 artifact。SciTLDR 必須另用其官方 files2rouge／ROUGE-L 協定，不能套用這條多句規則。
 - ⚠️ pred 與 ref **必須用同一個函式分句**。原始換行是雜訊不是句界
   （370/500 predictions 含雜訊換行，references 一個都沒有；不一致會低估 ~0.023）
 
 ### 已套用 patch；合併前仍需測試
 
-以下 patch 的方向正確。`pytest` 已加入 `requirements.txt`，`tests/` 目前 108 項全過；
+以下 patch 的方向正確。`pytest` 已加入 `requirements.txt`，`tests/` 目前 156 項全過；
 SciTLDR 官方 conformance 尚未通過；它只在決定保留 optional stress test 時才是必要驗收，不阻塞 GovReport + Multi-News 主線：
 
 | 檔案 | 修正 |
@@ -102,7 +102,7 @@ SciTLDR 官方 conformance 尚未通過；它只在決定保留 optional stress 
 | `src/features/graph.py` | dense thresholding 不再竄改呼叫端；candidate route 預設改為有界 sparse TF-IDF kNN，整體 selector 仍待 sparse 化 |
 | `src/models/extractive/encoder_rank.py` | 完整輸入 batch encode、模型快取、pinned revision、截斷率與 deterministic cost facts；CPU 與 3-row pipeline smoke 已過，正式 cold/warm/GPU cost pilot 待做 |
 | `src/pipeline/optimizer_dispatch.py` | `pop_size`/`n_gen`/`seed` 接線；**移除靜默 fallback** |
-| `src/objectives/factory.py` | single-sentence 關閉 subset search；canonical multi-sentence 禁止 raw-sum salience；group coverage 與 selector isolation 尚待完成 |
+| `src/objectives/factory.py`、`evaluator.py` | single-sentence 關閉 subset search；canonical multi-sentence 禁止 raw-sum salience；Greedy／GRASP／NSGA-II 共用 objective 與 feasibility，並保存 Pareto front；group coverage 與最終 Pareto policy 尚待完成 |
 | `src/pipeline/candidate_builder.py` | `route_top_k` 只定義 proposals、`min_per_route` 保留 route-specific evidence、RRF 只在 union/guard 內填 total cap；輸出完整 proposal/allocation artifact |
 | `src/pipeline/select_sentences.py` | MVP selector 明確使用 normalized RRF salience；membership-only 只作可消融對照，不再把 semantic provenance 收集後丟棄 |
 | `src/eval/oracle.py` | 新增 greedy oracle reference；不是 exact upper bound。SciTLDR official oracle 僅在保留 optional stress test 時實作／重現 |

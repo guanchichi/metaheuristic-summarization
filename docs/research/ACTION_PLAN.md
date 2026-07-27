@@ -122,6 +122,7 @@
 
 ### 1d. 路由與融合層
 
+- [x] lexical TF-ISF v2 改用非負平滑 `log((N+1)/(sf+1))`；ubiquitous term 為 0 而非負證據，revision 明記 `smooth_nonnegative_sublinear_unigram`，v1 僅保留 legacy 重現
 - [~] semantic route 已要求明確 sentence-encoder checkpoint/revision、一次載入、batch encode，並記錄 `max_model_tokens` 與截斷率；pinned MiniLM 真實 CPU 與 3-row Multi-News smoke 已通過，尚待正式 cold/warm cost pilot
 - [x] graph candidate route 預設為有界 TF-IDF cosine sparse kNN；dense `N×N` 僅能以 `dense_legacy` 明確啟用
 - [x] 候選融合採 normalized reciprocal-rank fusion、rank percentile 與 route agreement；MVP selector 實際接收 RRF salience，不再只使用 provenance membership
@@ -131,21 +132,25 @@
 ### 1e. Objective 與 selector contract
 
 - [~] task-profile factory 已使單句只啟用 salience、強制一個句子並拒絕 subset NSGA-II；document-group coverage 尚未實作，若提前宣告會 fail loud
-- [~] canonical multi-sentence 已禁止 raw sum，僅允許 mean／length-normalized salience；coverage/redundancy 的跨文件尺度仍待 validation pilot
-- [~] `max_words / max_sentences` 已成獨立 hard constraint；`min_words` 與空集合修復策略尚待補
-- [ ] deterministic greedy／MMR 與 NSGA-II 使用完全相同 candidates、objectives 與 constraints
+- [~] canonical multi-sentence 已禁止 raw sum，僅允許 mean／length-normalized salience；shared evaluator 已固定 salience／full-source facility coverage／平均 pairwise redundancy 的方向與 aggregation，並把 `full source × candidates` coverage matrix 與 `candidates × candidates` redundancy matrix 分開；權重與跨文件尺度仍待 validation pilot
+- [x] `min_words / max_words / max_sentences / non-empty` 已由同一 feasibility contract 判斷；不可行解 fail loud，不作未記錄的空集合或長度 repair
+- [~] deterministic greedy、GRASP 與 NSGA-II 已使用完全相同 candidates、objectives 與 constraints，且保存 final evaluation；獨立 MMR baseline 尚待 Phase 2
+- [~] NSGA-II artifact 已保存完整可行 Pareto front 與 per-solution objectives；目前 weighted-sum Pareto policy 僅為 provisional，仍須在 validation 凍結 knee/reference-point policy
+- [~] 3-row correctness smoke 證實未設下限時 mean-salience 會退化成 1 句（41–88 words）；MVP 因此暫設 200–250 words 作 length-matched validation band，數值尚未 freeze，且不得依 test 調整
+- [x] full-source coverage smoke 的 coverage universe 為 80／227／92 句（非 candidate pool 的 55／60／60）；三筆輸出為 246／240／248 words、全部 feasible，union/guard 越界與 RRF mismatch 皆為 0
+- [x] non-negative smoothed TF-ISF v2 重跑同一 smoke，輸出長度與選句數維持 246／240／248 words、5／4／7 句，provenance revision 正確且所有 contract checks 仍通過
 
 ### 1f. 測試
 
 - [x] GitHub Actions unit-test CI：push／PR 到 `master` 自動 compile + `python -m pytest -q`；正式 benchmark 不納入輕量 CI
-- [ ] TF-ISF / length / position 的手算 golden tests
-- [ ] `rougeL` vs `rougeLsum` golden test
-- [ ] **條件式**：若保留 SciTLDR，加入官方 reference aggregation golden test；若刪除該實驗，不列入 Gate 1
+- [x] TF-ISF v1/v2、length、position v1/v2 的手算 golden tests；測試明確記錄 legacy repetition/length/lead bias，不把現況誤認為已驗證的優良公式
+- [x] `rougeL` vs `rougeLsum`、pred/ref 對稱分句、corpus guard 與 per-example mean alignment golden tests
+- [~] SciTLDR max-ROUGE-1 選定同一 reference 的 aggregation rule 已依官方 `cal-rouge.py` 釘住；只有決定保留 SciTLDR 時，才需再完成 local `rouge-score` 對官方 `files2rouge` 的數值 conformance
 - [x] Graph：diagonal、threshold、dangling node、sparse edge bound
 - [x] 候選 top-K rank、union boundary、route reservation、RRF selector handoff、route provenance 與 document guard 測試
 - [x] canonical schema 與 production prediction 已保存 Multi-News document boundaries／selected sentence provenance；candidate route 與 enabled feature 均 fail loud
 - [~] task-profile matrix 已測 single sentence 不建立 redundancy objective且拒絕 subset NSGA-II；multi-document group coverage 尚未完成
-- [~] NSGA-II 參數傳遞與 **no-fallback** 已測；seed 跨重跑決定性尚待補
+- [x] shared objective 手算 golden、min/max/non-empty feasibility、Greedy/GRASP/NSGA-II handoff、NSGA-II 參數傳遞、seed 跨重跑決定性與 **no-fallback** 已測
 - [ ] 10 篇 toy pipeline snapshot test
 
 **Gate 1**：所有手算測試通過；同 seed 重跑得到相同 indices；故意移除 pymoo 時 run 必須 fail。

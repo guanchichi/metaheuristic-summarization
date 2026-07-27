@@ -21,8 +21,8 @@
 
 | | 狀態 |
 |---|---|
-| Phase 1 程式契約 | 🟡 **大部分完成** —— route 獨立排名、provenance 進 selector、objective factory、canonical schema、evaluator 邊界；見 `ACTION_PLAN.md` Phase 1 |
-| 測試 | ✅ 108 項全過；CI 已接 GitHub Actions |
+| Phase 1 程式契約 | 🟡 **大部分完成** —— route 獨立排名、provenance 進 selector、shared objective/constraint evaluator、Pareto artifact、canonical schema；見 `ACTION_PLAN.md` Phase 1 |
+| 測試 | ✅ 156 項全過；CI 已接 GitHub Actions |
 | **baseline** | 🔴 **完全沒做** —— Gate 2 的全部內容。沒有它，上面那條 F-0 永遠無法回答 |
 | 新 pipeline 的實測結果 | 🔴 **零** —— 還沒跑過任何 validation 評估 |
 | 資料 | 🟡 canonical 產生器已實作，尚未產出完整三個 split 與 manifest |

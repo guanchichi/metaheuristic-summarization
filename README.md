@@ -13,7 +13,7 @@
 |---|---|
 | `runs/` 底下的既有結果 | 🔴 **無效** —— 超參數是在 test set 上選的（test-set overfitting） |
 | Stage 2 的 `w_bert` 參數 | 🔴 **命名誤導** —— 它加權的是 TF-IDF 分數，不是 BERT。Stage 2 目前沒有 PLM |
-| ROUGE-L | 🟠 舊碼用單序列 `rougeL`；已改為多句適用的 `rougeLsum`，但與 published Perl ROUGE 的 parity 尚未驗證 |
+| ROUGE-L | 🟠 舊碼用單序列 `rougeL`；已改為多句適用的 `rougeLsum` 並通過內部手算 golden，但與 published Perl ROUGE 的 parity 尚未驗證 |
 | Baseline（Lead / TextRank / LexRank / PacSum） | 🔴 **尚未實作** —— 舊論文表格的 baseline 數字引用自其他論文，不是本 repo 產出 |
 | 三軌候選生成 | 🟠 correctness contract 已完成：完整輸入排名、route proposals/reservations、RRF selector salience、total cap 與 coverage guard；實際效益仍待 validation pilot |
 
@@ -165,7 +165,8 @@ python -m src.eval.oracle --input data/processed/multi_news_test.jsonl --max_wor
 - `src/data/preprocess_scitldr.py` 已保留 SciTLDR 多個替代 reference；`scitldr_official` 評估在官方 wrapper 通過一致性測試前會拒絕執行
 - `src/features/semantic.py` 的 `centrality` 與 `novelty` 數學上完全反相關，同時加權是退化的
 - graph candidate route 已使用有界 sparse kNN，但 selector／coverage objective 目前仍可能建立 dense `N×N` similarity；完成 sparse selector/objective 後才能宣稱整條長文件 pipeline 都是 sparse
-- canonical task-profile objective 已禁止 raw-sum salience；legacy config 仍保留歷史 sum 行為，因此舊 run 依然有被長度上限支配的問題
+- canonical task-profile objective 已禁止 raw-sum salience；Greedy／GRASP／NSGA-II 已共用 objective 與 feasibility contract。legacy config 仍保留歷史 sum 行為，因此舊 run 依然有被長度上限支配的問題
+- NSGA-II 已保存完整可行 Pareto front，但目前 final selection 仍是 provisional weighted sum；knee／reference-point policy 必須只用 validation 凍結
 
 ---
 

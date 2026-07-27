@@ -55,9 +55,13 @@ test 就已經被用於模型選擇，那個 split 對這批設定而言已經�
 |---|---|
 | `phase1-provenance-smoke-20260726` | **3** |
 | `phase1-route-smoke-20260726` | **3** |
+| `phase1-objective-smoke-20260726` | **3**（diagnostic：`min_words=0` 退化為單句） |
+| `phase1-objective-min200-smoke-20260726` | **3**（200–250 word feasibility smoke） |
+| `phase1-fullsource-objective-smoke-20260726` | **3**（full-source coverage correctness smoke） |
+| `phase1-smooth-tfisf-smoke-20260727` | **3**（non-negative smoothed TF-ISF v2 smoke） |
 
-這兩個是 Phase 1 重構的**接線驗證**（confirming provenance reaches the selector,
-routes rank the full input）。**3 篇文件的 ROUGE 沒有任何統計意義**，
+這些是 Phase 1 重構的**接線／constraint 驗證**（confirming provenance reaches the selector,
+routes rank the full input, shared objectives respect the declared length band）。**3 篇文件的 ROUGE 沒有任何統計意義**，
 它們的存在只證明 pipeline 跑得通，不證明任何方法有效。
 
 ---

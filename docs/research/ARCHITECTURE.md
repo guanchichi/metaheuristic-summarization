@@ -280,6 +280,8 @@ CandidateRecord
 
 所有 objective 在單一文件內正規化到固定方向與尺度；不能把未正規化 sum、mean 與成本混在一起。
 
+Phase 1e 實作中，coverage 明確使用 `full source sentences × candidates` 矩陣，redundancy 使用 `candidates × candidates` 矩陣；不得以 candidate-only coverage 冒充 source coverage。prediction 的 `coverage_universe_size` 必須等於完整來源句數，供 artifact audit。
+
 ### 6.2 Task-specific 啟用矩陣
 
 | Task profile | Salience | Facility coverage | Redundancy | Group coverage | Selector |
@@ -304,6 +306,8 @@ CandidateRecord
 - population、generation、seed 與 operator 全部寫入 effective config。
 - final solution 以 validation 凍結的 knee/reference-point rule 選取，不可 test 後挑最好 scalar weights。
 - failure 直接報錯，不得 fallback 到 greedy。
+
+目前 Phase 1e 實作已由 shared evaluator 產生三目標與四類 feasibility constraint，並把完整可行 Pareto front、每解 objective、最後選中 row 寫入 prediction artifact。現行 `weighted_sum_on_shared_objectives` 只作工程驗證的 provisional policy；未在 validation 凍結 knee／reference-point policy 前，不得當成最終論文設定。
 
 ### 7.3 Metaheuristic 生存 gate
 

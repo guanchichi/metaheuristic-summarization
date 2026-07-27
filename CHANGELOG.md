@@ -6,6 +6,22 @@ All notable changes to the `metaheuristic-summarization` project will be documen
 > invalidated.** They are kept for history, with corrections noted inline.
 > See `docs/research/CODE_AUDIT_IEEE_Access.md`.
 
+## [Unreleased] - Phase 1e objective/selector isolation
+
+- Added one shared evaluator for salience, facility coverage, redundancy, scalar
+  utility, and non-empty/min-max length feasibility.
+- Facility coverage now evaluates the full source-to-candidate matrix; its
+  universe is no longer silently truncated to the candidate pool.
+- Greedy, GRASP, and NSGA-II now search the same declared problem; infeasible
+  results fail loudly instead of being emitted or silently repaired.
+- NSGA-II predictions retain the feasible Pareto front, per-solution objective
+  values, and selected row. The current weighted-sum policy remains provisional.
+- Added hand-computed objective/constraint tests and cross-run seed checks.
+- Added hand-computed TF-ISF/length/position and ROUGE protocol golden tests;
+  invalid position methods, decay values, and length clips now fail loudly.
+- Corrected TF-ISF v2 smoothing to `log((N+1)/(sf+1))`, preventing ubiquitous
+  terms from becoming negative evidence; v1 remains available for legacy runs.
+
 ## [v0.6.0] - 2026-07-26 (Phase 1 research contracts)
 
 Establishes the contracts the Phase 1 validation pilot depends on. Nothing here
@@ -49,7 +65,7 @@ is a research result: no configuration has been evaluated against a baseline yet
 
 ### Notes
 - Route or feature failure fails the run. No zero-filling, no silent fallback.
-- Tests: 108 pass. Still open: no baselines exist (Gate 2), so the central
+- Tests at the v0.6.0 checkpoint: 108 passed. Still open: no baselines exist (Gate 2), so the central
   question — whether any configuration beats Lead — remains unanswered.
 
 ## [v0.5.0] - 2026-07-26 (Correctness refactor)
