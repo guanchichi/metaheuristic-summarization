@@ -132,8 +132,9 @@
 
 - [~] task-profile factory 已使單句只啟用 salience、強制一個句子並拒絕 subset NSGA-II；document-group coverage 尚未實作，若提前宣告會 fail loud
 - [~] canonical multi-sentence 已禁止 raw sum，僅允許 mean／length-normalized salience；coverage/redundancy 的跨文件尺度仍待 validation pilot
+- [~] @chi 07-27 | 上一項的禁令只涵蓋「有 `task_profile` 且 `output_mode=multi_sentence`」的路徑（`factory.py:87-92`）；沒有 `task_profile` 的 legacy_unprofiled 路徑（`factory.py:44-57`）預設仍是 "sum"，不受此禁令限制，屬潛在缺陷、尚未確認實際造成污染，詳見 `CODE_AUDIT_IEEE_Access.md` F-14
 - [~] `max_words / max_sentences` 已成獨立 hard constraint；`min_words` 與空集合修復策略尚待補
-- [ ] deterministic greedy／MMR 與 NSGA-II 使用完全相同 candidates、objectives 與 constraints
+- [ ] @chi 07-27 | deterministic greedy／MMR 與 NSGA-II 使用完全相同 candidates、objectives 與 constraints；已知違反，證據見 F-15
 
 ### 1f. 測試
 

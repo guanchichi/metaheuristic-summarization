@@ -35,7 +35,7 @@
 | F-4 | PLM 每篇重載模型 | 🔴 成立 | ✅ 程式已修 | `load_encoder()` 快取。**但正式計時數字仍須依鎖定 protocol 重測** |
 | F-5 | 相似度矩陣就地竄改 | 🔴 成立 | ✅ 已修 + regression test | `src/features/graph.py` |
 | F-6 | `pop_size`/`n_gen`/`seed` 未接線 | 🔴 成立 | ✅ 已修 | `optimizer_dispatch.py` |
-| F-7 | salience 用總和 → 基數偏誤 | 🔴 成立 | ✅ 已禁止 | `objectives/factory.py` 拒絕 profiled config 用 raw sum；legacy 保留 sum |
+| F-7 | salience 用總和 → 基數偏誤 | 🔴 成立 | 🟡 部分禁止（僅限有 `task_profile` 的 profiled multi_sentence；例外詳見 F-14） | `objectives/factory.py` 拒絕 profiled multi_sentence config 用 raw sum；legacy_unprofiled（無 `task_profile`）與 legacy 保留 sum |
 | F-8 | SciTLDR 多重 reference 被串接 | 🔴 成立 | ✅ 已修 | `preprocess_scitldr.py` 改存 `references: list` |
 | **F-9** | **repo 無任何 baseline 實作** | 🔴 成立 | 🔴 **仍然成立** | **未做。Phase 2 / Gate 2 的全部內容** |
 | F-10 | 圖模組 τ 套用不一致 | 🔴 成立 | ✅ 已修 | τ 已傳入 `feature_builder.py` 與 graph route |
@@ -505,6 +505,85 @@ imp = np.sum(self.importance[idx])      # 未正規化的總和
 
 ---
 
+### 🟡 F-14. raw-sum 禁令只涵蓋「有 task_profile 的 multi_sentence」，legacy_unprofiled 路徑可繞過
+
+**與 F-7 的關係**：F-7（§0.0 狀態表第 38 行）的「新 pipeline」欄已改為限定範圍的說法，並註明「legacy_unprofiled（無 `task_profile`）與 legacy 保留 sum」——本條目就是這個已知例外的具體化：明確給出讓 raw sum 在 profiled 路徑之外實際生效的觸發條件、證據行號與測試缺口。
+
+**發現日期**：2026-07-27（investigation agent 覆核，未執行任何 git 操作）。
+
+**觸發條件**（需三者同時成立）：
+1. 傳入 `summarize_one()` 的 `doc` **沒有 `task_profile` 欄位**（例如舊格式 flat JSONL：`{"id": ..., "sentences": [...], "highlights": ...}`）
+2. `optimizer.method` 設為 `nsga2`（或 `fast_nsga2`，走同一個 `objective_spec.importance_aggregation` 轉發路徑）
+3. config 的 `objectives.importance_aggregation` **未被顯式設定**
+
+**證據**：
+
+- `src/objectives/factory.py:44` 的 `if not task_profile:` 分支（legacy_unprofiled）在 `:52-54` 直接取
+  ```python
+  "importance_aggregation": str(
+      objective_cfg.get("importance_aggregation", "sum")
+  ),
+  ```
+  沒有任何值域限制。
+- 唯一擋 raw sum 的檢查在 `:87-92`：
+  ```python
+  aggregation = str(objective_cfg.get("importance_aggregation", "mean")).lower()
+  if aggregation not in {"mean", "length_normalized"}:
+      raise ValueError(...)
+  ```
+  這段程式碼**只存在於「有 `task_profile` 且 `output_mode == "multi_sentence"`」的分支**（`:59-64` 的 mode 檢查之後）。`output_mode == "single_sentence"` 的分支（`:75-85`）把值覆寫成 `"single_item"`，也不受影響。
+- `src/pipeline/select_sentences.py:78-116` 的 `summarize_one()` 對傳入的 `doc` **沒有呼叫** `src/data/schemas.py` 的 `validate_document_example()`（該函式在 `:157-159` 才會強制檢查 `task_profile` 必須存在），而是直接呼叫 `flatten_sentence_records(doc)`（`:79`）與 `doc.get("task_profile")`（`:116`）。因此沒有 `task_profile` 的 dict 目前仍能被完整跑過整條 selector pipeline。
+- `tests/test_pipeline_integration.py:241-244`（`test_single_sentence`）目前仍在用這種無 `task_profile` 的 dict 呼叫 `summarize_one()`，證明這條輸入路徑**不是理論可能性，而是測試套件現在就在用的真實輸入形態**（該測試本身不涉及 nsga2，只是證明該路徑活著）。
+- `optimizer_dispatch.py:96-98` 把 `(objective_spec or {}).get("importance_aggregation", "sum")` 原樣轉給 `nsga2_select(...)`，沒有第二層檢查。
+
+**影響範圍**：**潛在缺陷，尚未確認實際發生。** 沒有證據顯示現有 `runs/` 底下任何一個 run 是用「無 `task_profile` 的資料 + method=nsga2 + 未設 importance_aggregation」這個組合跑出來的——但也沒有任何機制阻止未來這樣跑，也沒有測試會在這個組合發生時發出警告。CLAUDE.md 與 `docs/research/ACTION_PLAN.md` 1e 目前的敘述提到「canonical multi-sentence 已禁止 raw sum」，沒有標明這個例外，容易讓人誤以為 raw sum 已經被全面擋下。
+
+**測試覆蓋**：`tests/test_pipeline_integration.py:275-298` 只測了「有 `task_profile`」的兩種情形（`mean` 預設、`sum` 被拒）。**沒有任何測試**針對「無 `task_profile` + method=nsga2 + 未設定 importance_aggregation」這個組合去驗證 "sum" 是否真的流到 `nsga2_select`。
+
+**建議修法（未動手，待你決定方向）**：
+- 選項 A：讓 `factory.py:44` 的 legacy_unprofiled 分支也套用跟 profiled 分支相同的 mean/length_normalized 限制；風險是可能讓依賴 legacy flat JSONL 重現的既有腳本失敗，需先確認是否還有人在跑這條路徑。
+- 選項 B：在 `select_sentences.py` 入口強制呼叫 `validate_document_example()`，讓沒有 `task_profile` 的資料直接被擋在門口；風險是會移除目前對舊格式的相容性，需先確認這個相容性是否還要保留。
+- 兩種選項都需要新增覆蓋「無 task_profile + method=nsga2 + 未設定 importance_aggregation」組合的 regression test。
+
+**目前狀態**：🔴 未修。本條目只記錄發現，不代表已有任何程式碼變更。
+
+---
+
+### 🟠 F-15. fusion+NSGA-II 與其宣稱的對照組不是 matched condition
+
+**發現日期**：2026-07-27（investigation agent 覆核，未執行任何 git 操作）。
+
+**背景**：`2_Fusion_ExpA/B/C/Final.yaml`（`optimizer.method: fast_nsga2`）與 `2_Fusion_NoNsga2.yaml`（`optimizer.method: fast_fused`，檔案註解自稱「Ablation: Without NSGA-II」）常被拿來當作「有沒有用 NSGA-II」的對照組。逐行追蹤兩條路徑實際執行的程式碼後，兩者的差異遠不只「optimizer 有沒有換掉」。
+
+**呼叫鏈**：
+
+- `2_Fusion_ExpA/B/C/Final.yaml` → `optimizer_dispatch.py:141-163`（`fast_nsga2` 分支）→ `fast_nsga2_select`（`src/models/extractive/fast_fused.py:93-129`）→ `nsga2_select`（`src/models/extractive/nsga2.py:105-173`，呼叫點在 `fast_fused.py:107,117`）
+- `2_Fusion_NoNsga2.yaml` → `optimizer_dispatch.py:116-125`（`fast`/`fast_fused`/`tfidf_fused` 分支）→ `fast_fused_select`（`fast_fused.py:27-54`）→ `greedy_select`（`src/models/extractive/greedy.py:7-50`，呼叫點在 `fast_fused.py:37,45`）
+
+**逐項對照**：
+
+| 項目 | `fast_nsga2`（→ `nsga2.py`） | `fast_fused`（NoNsga2，→ `greedy.py`） |
+|---|---|---|
+| 目標函數項數 | **三個獨立目標**：`out["F"] = [-imp, -cov, red]`（`nsga2.py:94`） | **單一純量分數**：`score = alpha*base_scores[i] - (1-alpha)*max_sim`（`greedy.py:32`） |
+| Coverage 項 | **有**：`_compute_coverage(sim_mat, idx, coverage_method)`（`nsga2.py:86`），對全部句子算「與已選集合最大相似度的平均」（`_coverage_max`，`nsga2.py:16-19`） | **完全沒有**。`greedy.py` 全文（1-50 行）沒有任何 coverage 計算 |
+| Redundancy 公式 | `red = mean(已選集合內部所有配對相似度的上三角)`（`nsga2.py:88-92`），在 `_evaluate` 對整個候選子集一次算完 | `max_sim = max(候選句 i 與已選集合中任一句的相似度)`（`greedy.py:29`）——不是平均、不是配對加總，是 MMR 型的 max-similarity |
+| Redundancy 作用時機 | 事後從 Pareto front 挑解時的線性權重（`nsga2.py:162`），**不影響** NSGA-II 搜尋過程本身（`_evaluate` 未使用 `lambda_*`） | 每一步貪婪決策當下就直接使用，驅動選句過程本身 |
+| 搜尋方式 | population-based 多目標 Pareto 搜尋（NSGA-II，`nsga2.py:132-146`） | 單輪貪婪、一次通過（`greedy.py:20-47`），無族群、無世代、無 Pareto front |
+| 參數來源 | `objectives.lambda_redundancy`（`optimizer_dispatch.py:159`） | `redundancy.lambda`（`optimizer_dispatch.py:120`）——**不同的頂層 key** |
+| 實際生效的冗餘權重 | **`1.2`**（`2_Fusion_ExpB.yaml` 明確宣告 `objectives.lambda_redundancy: 1.2`） | **`0.7`**（硬編碼預設值，來源 `optimizer_dispatch.py:120`；`2_Fusion_NoNsga2.yaml` 沒有 `redundancy:` 區塊，該檔宣告的 `objectives.lambda_redundancy: 1.2` 在這條路徑完全是死值，`optimizer_dispatch.py:116-125` 從未讀取 `cfg.get("objectives")`） |
+
+兩個「實際生效的冗餘權重」不只數值不同（1.2 vs 0.7），角色也不同：一個是事後 Pareto-front 選解時乘在「原始 mean-pairwise 相似度」上的權重（不影響搜尋過程），另一個是每一步貪婪決策當下直接使用、同時決定 importance 與 redundancy 相對權重的係數（`alpha` 與 `1-alpha`）。兩者連量綱都不可比。
+
+**影響**：共同作者已確認 `2_Fusion_NoNsga2.yaml` 的設計意圖就是 NSGA-II 消融組（不是另一條獨立 baseline）。因此這是**方法學缺陷，不是命名或論文呈現問題**：此消融比較為 **confounded**，至少同時改變了三個變因：(1) coverage 目標的有無、(2) redundancy 的計算公式與作用時機、(3) 實際生效的冗餘權重數值（1.2 vs 0.7，且不是同一個 cfg key、不是同一個數學角色）。任何基於「`fast_nsga2` vs `fast_fused`（NoNsga2）」這組對照所做的「NSGA-II 帶來多少貢獻」的結論，都無法把觀察到的指標差異單獨歸因於「NSGA-II 這個搜尋演算法本身」。
+
+**Hypothesis（⚠️ 未實測，純方向性推論，不是結論）**：對照組（NoNsga2）同時失去了 coverage 目標，而不只是失去 NSGA-II 的搜尋機制。若 coverage（對整篇文件的代表性）原本是系統表現的重要來源之一，那麼目前的消融設計可能會讓「移除 NSGA-II」看起來造成更大的指標掉幅——也就是**可能高估 NSGA-II 本身的貢獻**，因為掉幅裡混了「失去 coverage 目標」的效果。這只是一個待驗證的方向；究竟是高估、低估、或影響方向不定，必須做一次真正 matched 的消融（同樣有 coverage 項、同一個 redundancy 公式與權重來源，唯一差異是搜尋演算法）才能確認，目前完全沒有實測數字支持或反駁這個 hypothesis。
+
+**附帶發現**：`fast_nsga2` 分支（`optimizer_dispatch.py:141-163`）從不轉發 `objectives.coverage_method` 給 `nsga2_select`——即使 config 想調整 coverage 計算方式也調不到，`coverage_method` 永遠吃 `src/models/extractive/nsga2.py:118` 的函式預設值 `"max"`。相較之下，plain `nsga2` 分支（`optimizer_dispatch.py:92`）會讀取並轉發這個鍵。
+
+**目前狀態**：🔴 未修。設計意圖已由共同作者確認為消融組，故此為方法學缺陷；上方 hypothesis 尚未實測。本條目只記錄程式碼行為與其造成的比較混淆，不代表已有任何程式碼或 config 變更。
+
+---
+
 ## Part 2 — 對研究主計畫的實證補充
 
 `paper_revision_plan_IEEE_Access.md` 是研究標準來源。以下列出 legacy 程式與 artifact 對其中幾條的補充；任何數字仍依 evidence status 判讀。
@@ -517,7 +596,7 @@ imp = np.sum(self.importance[idx])      # 未正規化的總和
 | **P0-4** PLM 貢獻為零 | 「先當實作問題排查，檢查 w_plm 是否太小 / pooling 策略」 | ✅ 方向對，但**原因不是那兩個**。pooling 其實已經是 mean pooling（不是 CLS）。真正原因是 **Stage 2 根本沒有接 PLM**（F-3）。改用 Sentence-BERT 的建議仍然正確且必要 |
 | **P1-2** ROUGE-Lsum | 「若是，改用 ROUGE-Lsum 重算」 | ✅ **完全正確，且效果比預期大**。實測 Multi-News R-L：0.201 → **0.386**。注意 pred/ref 分句必須一致（見 F-2 的警告） |
 | **P2-1** mutation 1.0 語義 | 「per-individual 還是 per-gene 待確認」 | ✅ **已確認**：pymoo `BitflipMutation()` 的 `prob=1.0` 是 **per-individual**；per-gene 預設 `1/n_var`。實測 n_var=50 時每基因翻轉率 0.0204 ≈ 1/50，約 63% 的個體至少被改動一個位元。**R4 擔心的「整條染色體隨機化」不會發生**，論文照實寫即可 |
-| **P2-1** pop_size / generations | 「補上 NSGA-II 設定」 | ⚠️ **補之前先修 F-6**：config 裡的值從未被讀取，實際跑的一律是 100/100。**不要照 YAML 抄進論文** |
+| **P2-1** pop_size / generations | 「補上 NSGA-II 設定」 | ⚠️ **狀態見 §0.0 狀態表**：config 裡的值從未被讀取，實際跑的一律是 100/100。**不要照 YAML 抄進論文** |
 | **P2-2** 多次執行取平均 | 「必須報告 mean ± std over ≥5 runs」 | ✅ 同意。補充：目前跨 process 重跑是可重現的（實測三次相同），但靠的是全域 seed 的巧合，應把 seed 顯式接線 |
 | **P1-1** baseline | 「必補 Lead-3、PacSum、SBERT centroid、LLM zero-shot」 | ✅ 同意。**補充**：repo 中連現有論文報告的 Lead/TextRank/LexRank 都沒有實作（F-9），這些數字目前無法重現，**必須全部自己重跑** |
 
@@ -525,7 +604,7 @@ imp = np.sum(self.importance[idx])      # 未正規化的總和
 
 0. 🔴 **F-0（legacy Multi-News 未贏 Lead）** —— 同資料同內部 evaluator 下，ExpB 只在 R1 高 0.0021，R2/R-Lsum 較低；因 ExpB test-tuned，只能觸發 redesign，不能當新結果。
 1. **F-3（Stage 2 無 PLM）** —— 方法章與實作不符，必須在任何新實驗前解決。
-2. **F-5（相似度矩陣就地竄改）** —— 會靜默改變實驗語意，重跑實驗前必須先修。
+2. **F-5（相似度矩陣就地竄改）** —— 會靜默改變實驗語意；狀態見 §0.0 狀態表。
 3. **F-9（無 baseline 實作）** —— 影響現有表格的可重現性，不只是「要補新 baseline」。
 4. **F-12（分句品質）** —— 855 words 的「句子」會直接破壞長度控制，且系統對它有正向偏好。
 5. **F-13(f)（靜默退回 greedy）** —— 需先確認沒有既有實驗其實跑的是 greedy。
@@ -569,12 +648,12 @@ imp = np.sum(self.importance[idx])      # 未正規化的總和
 - SciTLDR 保留 `target` 為 list，不要串接
 - 加入資料健全性檢查（句長分布、異常句偵測）
 
-**R-4. 接線與正確性（修正 F-5、F-6、F-10、F-13f）**
+**R-4. 接線與正確性（F-5、F-6、F-10、F-13f 的原始修法規劃；各項狀態見 §0.0 狀態表）**
 - `graph.py` 加 `.copy()`
 - `pop_size` / `n_gen` / `seed` 正確接線
 - τ 一致地傳給 graph 特徵與候選池兩處
 - 移除吞例外的 `except (ImportError, Exception)`，改為 fail loud
-- config 新增 schema 驗證：**未被程式使用的鍵值直接報錯**（這能一勞永逸防止 F-6 再發生）
+- config 新增 schema 驗證：**未被程式使用的鍵值直接報錯**（這能一勞永逸防止 F-6 再發生；報告型檢查已有 `scripts/audit/config_key_audit.py`（唯讀、不阻擋執行），**強制型驗證仍未實作**）
 
 **R-5. Baseline 模組（新增 `src/baselines/`）**
 - `lead.py`（Lead-3 / Lead-K）
@@ -637,7 +716,7 @@ imp = np.sum(self.importance[idx])      # 未正規化的總和
 ### 補充實驗
 
 - **Ablation**（修好 PLM 之後重做）：完整 / −NSGA-II / −PLM / −Graph，三個資料集都要
-- **τ 敏感度**：5–7 個值，折線圖（**先修 F-10**）
+- **τ 敏感度**：5–7 個值，折線圖（**F-10 狀態見 §0.0 狀態表**）
 - **Centrality 比較**：PageRank vs degree vs betweenness vs eigenvector
 - **Fusion 權重敏感度**：`w_base` / `w_plm` 掃描
 - **NSGA-II formulation**：sum vs mean importance（F-7）
