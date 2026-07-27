@@ -172,6 +172,60 @@ CONFIG = {
 }
 
 
+FLOAT_PLACES = 6
+FLOAT_TOLERANCE = 10 ** -FLOAT_PLACES
+
+
+def _round_floats(obj, places: int = FLOAT_PLACES):
+    """Round every float in a nested structure.
+
+    The fixture is generated on one machine and verified on another (CI runs
+    ubuntu-latest). numpy and scikit-learn can differ in the last bits across
+    platforms and BLAS builds, so raw values such as 0.5000000000000001 would
+    make an exact comparison fail for reasons that have nothing to do with the
+    pipeline. Rounding at record time keeps the fixture readable and stable;
+    _assert_equivalent below still compares with a tolerance in case a value
+    sits on a rounding boundary.
+    """
+    if isinstance(obj, bool):
+        return obj
+    if isinstance(obj, float):
+        return round(obj, places)
+    if isinstance(obj, dict):
+        return {key: _round_floats(value, places) for key, value in obj.items()}
+    if isinstance(obj, list):
+        return [_round_floats(value, places) for value in obj]
+    return obj
+
+
+def _assert_equivalent(actual, expected, path: str = "") -> None:
+    """Compare recorded structures, allowing float noise below the tolerance."""
+    if isinstance(expected, bool) or isinstance(actual, bool):
+        assert actual == expected, f"{path}: {actual!r} != {expected!r}"
+    elif isinstance(expected, float) or isinstance(actual, float):
+        assert actual == pytest.approx(expected, abs=FLOAT_TOLERANCE), (
+            f"{path}: {actual!r} != {expected!r}"
+        )
+    elif isinstance(expected, dict):
+        assert isinstance(actual, dict), f"{path}: expected a mapping"
+        assert set(actual) == set(expected), (
+            f"{path}: keys differ; "
+            f"added={sorted(set(actual) - set(expected))} "
+            f"removed={sorted(set(expected) - set(actual))}"
+        )
+        for key in expected:
+            _assert_equivalent(actual[key], expected[key], f"{path}.{key}")
+    elif isinstance(expected, list):
+        assert isinstance(actual, list), f"{path}: expected a list"
+        assert len(actual) == len(expected), (
+            f"{path}: length {len(actual)} != {len(expected)}"
+        )
+        for index, (got, want) in enumerate(zip(actual, expected)):
+            _assert_equivalent(got, want, f"{path}[{index}]")
+    else:
+        assert actual == expected, f"{path}: {actual!r} != {expected!r}"
+
+
 def _record(result: dict) -> dict:
     """Reduce a run to the decisions worth protecting."""
     pool = result["candidate_pool"]
@@ -222,12 +276,18 @@ def _run_all(monkeypatch=None) -> list[dict]:
         monkeypatch.setattr(
             candidate_builder, "encoder_route_scores", _stub_encoder_route_scores
         )
-        return [_record(summarize_one(doc, CONFIG)) for doc in _toy_documents()]
+        return [
+            _round_floats(_record(summarize_one(doc, CONFIG)))
+            for doc in _toy_documents()
+        ]
 
     original = candidate_builder.encoder_route_scores
     candidate_builder.encoder_route_scores = _stub_encoder_route_scores
     try:
-        return [_record(summarize_one(doc, CONFIG)) for doc in _toy_documents()]
+        return [
+            _round_floats(_record(summarize_one(doc, CONFIG)))
+            for doc in _toy_documents()
+        ]
     finally:
         candidate_builder.encoder_route_scores = original
 
@@ -242,7 +302,7 @@ class TestToyPipelineSnapshot:
         actual = _run_all(monkeypatch)
         assert len(actual) == len(expected)
         for got, want in zip(actual, expected):
-            assert got == want, f"pipeline output changed for {want['id']}"
+            _assert_equivalent(got, want, want["id"])
 
     def test_every_document_produces_a_feasible_summary(self, monkeypatch):
         """A snapshot alone would happily record an infeasible result, so assert
