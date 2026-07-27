@@ -81,8 +81,12 @@ def sentence_tf_isf_scores_v2(
     use_sublinear_tf: bool = True,
     use_bigrams: bool = False,
 ) -> List[float]:
-    """Improved TF-ISF with stop-word filtering, punctuation removal,
-    sublinear TF weighting, and optional bigram support.
+    """Improved TF-ISF with non-negative smoothed ISF, stop-word filtering,
+    punctuation removal, sublinear TF weighting, and optional bigram support.
+
+    ``ISF(t) = log((N + 1) / (sf(t) + 1))``.  Unlike the legacy v1 formula,
+    a term present in every sentence contributes zero rather than becoming
+    negative evidence.
 
     Parameters
     ----------
@@ -117,7 +121,7 @@ def sentence_tf_isf_scores_v2(
         val = 0.0
         for t, c in tf.items():
             tf_weight = (1.0 + math.log(c)) if (use_sublinear_tf and c > 0) else float(c)
-            isf = math.log(N / (1.0 + sf[t]))
+            isf = math.log((N + 1.0) / (1.0 + sf[t]))
             val += tf_weight * isf
         # length-normalize by sqrt(len) to reduce long-sentence bias
         val /= math.sqrt(len(toks))

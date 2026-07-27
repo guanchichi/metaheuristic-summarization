@@ -30,6 +30,12 @@ def position_scores_v2(
     decay : float
         Decay rate for the exponential method.
     """
+    normalized_method = (method or "").strip().lower()
+    if normalized_method not in {"linear", "inverse", "exponential"}:
+        raise ValueError(f"unknown position scoring method: {method!r}")
+    if not math.isfinite(decay) or decay < 0:
+        raise ValueError("position exponential decay must be finite and non-negative")
+
     n = len(sentences)
     if n == 0:
         return []
@@ -38,14 +44,12 @@ def position_scores_v2(
 
     raw: List[float] = []
     for i in range(n):
-        if method == "linear":
+        if normalized_method == "linear":
             raw.append(1.0 - (i / (n - 1)))
-        elif method == "inverse":
+        elif normalized_method == "inverse":
             raw.append(1.0 / (1.0 + i))
-        elif method == "exponential":
+        elif normalized_method == "exponential":
             raw.append(math.exp(-decay * i))
-        else:
-            raw.append(1.0 - (i / (n - 1)))
 
     # normalize to [0, 1]
     mx = max(raw)

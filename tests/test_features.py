@@ -42,12 +42,17 @@ class TestTfIsf:
         assert all(0 <= s <= 1 for s in v2)
 
     def test_v2_sublinear_tf(self):
-        sents = ["word word word word.", "other sentence here."]
+        # Three rows avoid a two-point min-max normalization that would erase
+        # every magnitude difference. Raw TF ranks four repeats first;
+        # sublinear TF makes two repeats slightly more competitive after the
+        # shared sqrt-length normalization.
+        sents = ["word word word word", "zebra zebra", "quasar"]
         v2_sub = sentence_tf_isf_scores_v2(sents, use_sublinear_tf=True)
         v2_raw = sentence_tf_isf_scores_v2(sents, use_sublinear_tf=False)
-        assert len(v2_sub) == 2
-        # They can differ due to sublinear weighting
-        assert v2_sub != v2_raw or all(s == 0.5 for s in v2_sub)
+        assert len(v2_sub) == 3
+        assert v2_sub != pytest.approx(v2_raw)
+        assert v2_raw[0] > v2_raw[1]
+        assert v2_sub[1] > v2_sub[0]
 
 
 # ---- Position ----
@@ -79,6 +84,14 @@ class TestPosition:
         v2 = position_scores_v2(sents, method="linear")
         assert v1 == pytest.approx(v2, abs=1e-9)
 
+    def test_v2_unknown_method_fails_loudly(self):
+        with pytest.raises(ValueError, match="unknown position scoring method"):
+            position_scores_v2(["a", "b"], method="typo")
+
+    def test_v2_negative_decay_fails_loudly(self):
+        with pytest.raises(ValueError, match="decay"):
+            position_scores_v2(["a", "b"], method="exponential", decay=-0.1)
+
 
 # ---- Length ----
 
@@ -90,6 +103,10 @@ class TestLength:
         sents = ["a", "a b c d e f g"]
         scores = length_scores(sents)
         assert scores[1] > scores[0]
+
+    def test_nonpositive_clip_fails_loudly(self):
+        with pytest.raises(ValueError, match="clip must be positive"):
+            length_scores(["a"], clip=0)
 
 
 # ---- Compose ----

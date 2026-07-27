@@ -5,8 +5,8 @@ IMPORTANT (2026-07 audit fix):
 
     ``rouge_score``'s ``rougeL`` treats the whole summary as one token
     sequence and computes a single LCS, which severely under-scores
-    multi-sentence extracts.  ``rougeLsum`` splits on newlines, matches
-    sentence-by-sentence and aggregates.  Published results produced with
+    multi-sentence extracts.  ``rougeLsum`` uses newline sentence boundaries
+    for summary-level union-LCS.  Published results produced with
     Perl ROUGE / pyrouge are not automatically comparable; every local
     baseline must be rescored through the same evaluator.
 

@@ -1,0 +1,2115 @@
+[
+  {
+    "candidate_pool": {
+      "actual_size": 5,
+      "allocation": {
+        "actual_size": 5,
+        "candidate_universe_size": 5,
+        "coverage_guard_size": 2,
+        "dropped_proposals_by_route": {
+          "lexical": 0,
+          "semantic": 0
+        },
+        "mandatory_size": 4,
+        "min_per_route": {
+          "lexical": 1,
+          "semantic": 1
+        },
+        "proposal_union_size": 5,
+        "route_top_k": 4,
+        "selected_proposals_by_route": {
+          "lexical": 4,
+          "semantic": 4
+        },
+        "total_cap": 5,
+        "underfilled_by": 0
+      },
+      "configured_sources": [
+        "lexical",
+        "semantic"
+      ],
+      "min_per_route": 1,
+      "route_proposals": {
+        "lexical": [
+          {
+            "original_index": 0,
+            "rank": 1,
+            "raw": 1.0,
+            "reserved": false,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_01:d000:s000000"
+          },
+          {
+            "original_index": 3,
+            "rank": 2,
+            "raw": 1.0,
+            "reserved": false,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_01:d001:s000000"
+          },
+          {
+            "original_index": 1,
+            "rank": 3,
+            "raw": 0.0,
+            "reserved": true,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_01:d000:s000001"
+          },
+          {
+            "original_index": 2,
+            "rank": 4,
+            "raw": 0.0,
+            "reserved": false,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_01:d000:s000002"
+          }
+        ],
+        "semantic": [
+          {
+            "original_index": 3,
+            "rank": 1,
+            "raw": 0.9,
+            "reserved": false,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_01:d001:s000000"
+          },
+          {
+            "original_index": 0,
+            "rank": 2,
+            "raw": 0.6,
+            "reserved": false,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_01:d000:s000000"
+          },
+          {
+            "original_index": 4,
+            "rank": 3,
+            "raw": 0.4,
+            "reserved": true,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_01:d001:s000001"
+          },
+          {
+            "original_index": 2,
+            "rank": 4,
+            "raw": 0.2,
+            "reserved": false,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_01:d000:s000002"
+          }
+        ]
+      },
+      "route_top_k": 4,
+      "selector_salience_source": "base_score",
+      "total_cap": 6
+    },
+    "candidates": [
+      {
+        "document_id": "toy_01:d000",
+        "fused_rank": 1,
+        "inclusion_reasons": [
+          "guard:document",
+          "route:lexical",
+          "route:semantic"
+        ],
+        "original_index": 0,
+        "route_agreement": 2,
+        "route_ranks": {
+          "lexical": 1,
+          "semantic": 2
+        },
+        "selected_by_routes": [
+          "lexical",
+          "semantic"
+        ]
+      },
+      {
+        "document_id": "toy_01:d000",
+        "fused_rank": 3,
+        "inclusion_reasons": [
+          "reserve:lexical",
+          "route:lexical"
+        ],
+        "original_index": 1,
+        "route_agreement": 1,
+        "route_ranks": {
+          "lexical": 3,
+          "semantic": 5
+        },
+        "selected_by_routes": [
+          "lexical"
+        ]
+      },
+      {
+        "document_id": "toy_01:d000",
+        "fused_rank": 5,
+        "inclusion_reasons": [
+          "route:lexical",
+          "route:semantic",
+          "rrf_fill"
+        ],
+        "original_index": 2,
+        "route_agreement": 2,
+        "route_ranks": {
+          "lexical": 4,
+          "semantic": 4
+        },
+        "selected_by_routes": [
+          "lexical",
+          "semantic"
+        ]
+      },
+      {
+        "document_id": "toy_01:d001",
+        "fused_rank": 2,
+        "inclusion_reasons": [
+          "guard:document",
+          "route:lexical",
+          "route:semantic"
+        ],
+        "original_index": 3,
+        "route_agreement": 2,
+        "route_ranks": {
+          "lexical": 2,
+          "semantic": 1
+        },
+        "selected_by_routes": [
+          "lexical",
+          "semantic"
+        ]
+      },
+      {
+        "document_id": "toy_01:d001",
+        "fused_rank": 4,
+        "inclusion_reasons": [
+          "reserve:semantic",
+          "route:semantic"
+        ],
+        "original_index": 4,
+        "route_agreement": 1,
+        "route_ranks": {
+          "lexical": 5,
+          "semantic": 3
+        },
+        "selected_by_routes": [
+          "semantic"
+        ]
+      }
+    ],
+    "id": "toy_01",
+    "objective_spec": {
+      "active": [
+        "salience",
+        "facility_coverage",
+        "redundancy"
+      ],
+      "coverage_scope": "full_source_sentences",
+      "importance_aggregation": "mean",
+      "input_mode": "multi_document",
+      "output_mode": "multi_sentence",
+      "status": "task_profiled_v1"
+    },
+    "output_budget": {
+      "max_sentences": null,
+      "max_tokens": null,
+      "max_words": 40,
+      "min_words": 0,
+      "require_nonempty": true,
+      "unit": "words"
+    },
+    "selected_indices": [
+      0,
+      3
+    ],
+    "selection_evaluation": {
+      "candidate_relative_indices": [
+        0,
+        3
+      ],
+      "coverage_universe_size": 5,
+      "facility_coverage": 0.4328493923085676,
+      "feasible": true,
+      "redundancy": 0.16424696154283724,
+      "salience": 1.0,
+      "scalar_utility": 1.231306640766868,
+      "selected_indices": [
+        0,
+        3
+      ],
+      "selected_sentences": 2,
+      "selected_words": 9,
+      "violations": {
+        "max_length": -31.0,
+        "max_sentences": 0.0,
+        "min_words": -9.0,
+        "nonempty": -1.0
+      }
+    },
+    "summary_sentences": [
+      "Alpha signal opens the story.",
+      "Delta signal reports separately."
+    ]
+  },
+  {
+    "candidate_pool": {
+      "actual_size": 4,
+      "allocation": {
+        "actual_size": 4,
+        "candidate_universe_size": 4,
+        "coverage_guard_size": 1,
+        "dropped_proposals_by_route": {
+          "lexical": 0,
+          "semantic": 0
+        },
+        "mandatory_size": 2,
+        "min_per_route": {
+          "lexical": 1,
+          "semantic": 1
+        },
+        "proposal_union_size": 4,
+        "route_top_k": 4,
+        "selected_proposals_by_route": {
+          "lexical": 4,
+          "semantic": 4
+        },
+        "total_cap": 4,
+        "underfilled_by": 0
+      },
+      "configured_sources": [
+        "lexical",
+        "semantic"
+      ],
+      "min_per_route": 1,
+      "route_proposals": {
+        "lexical": [
+          {
+            "original_index": 2,
+            "rank": 1,
+            "raw": 1.0,
+            "reserved": true,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_02:d000:s000002"
+          },
+          {
+            "original_index": 3,
+            "rank": 2,
+            "raw": 1.0,
+            "reserved": false,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_02:d000:s000003"
+          },
+          {
+            "original_index": 0,
+            "rank": 3,
+            "raw": 0.0,
+            "reserved": false,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_02:d000:s000000"
+          },
+          {
+            "original_index": 1,
+            "rank": 4,
+            "raw": 0.0,
+            "reserved": false,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_02:d000:s000001"
+          }
+        ],
+        "semantic": [
+          {
+            "original_index": 0,
+            "rank": 1,
+            "raw": 0.6,
+            "reserved": true,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_02:d000:s000000"
+          },
+          {
+            "original_index": 3,
+            "rank": 2,
+            "raw": 0.4,
+            "reserved": false,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_02:d000:s000003"
+          },
+          {
+            "original_index": 2,
+            "rank": 3,
+            "raw": 0.266667,
+            "reserved": false,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_02:d000:s000002"
+          },
+          {
+            "original_index": 1,
+            "rank": 4,
+            "raw": 0.133333,
+            "reserved": false,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_02:d000:s000001"
+          }
+        ]
+      },
+      "route_top_k": 4,
+      "selector_salience_source": "base_score",
+      "total_cap": 6
+    },
+    "candidates": [
+      {
+        "document_id": "toy_02:d000",
+        "fused_rank": 1,
+        "inclusion_reasons": [
+          "guard:document",
+          "reserve:semantic",
+          "route:lexical",
+          "route:semantic"
+        ],
+        "original_index": 0,
+        "route_agreement": 2,
+        "route_ranks": {
+          "lexical": 3,
+          "semantic": 1
+        },
+        "selected_by_routes": [
+          "lexical",
+          "semantic"
+        ]
+      },
+      {
+        "document_id": "toy_02:d000",
+        "fused_rank": 4,
+        "inclusion_reasons": [
+          "route:lexical",
+          "route:semantic",
+          "rrf_fill"
+        ],
+        "original_index": 1,
+        "route_agreement": 2,
+        "route_ranks": {
+          "lexical": 4,
+          "semantic": 4
+        },
+        "selected_by_routes": [
+          "lexical",
+          "semantic"
+        ]
+      },
+      {
+        "document_id": "toy_02:d000",
+        "fused_rank": 2,
+        "inclusion_reasons": [
+          "reserve:lexical",
+          "route:lexical",
+          "route:semantic"
+        ],
+        "original_index": 2,
+        "route_agreement": 2,
+        "route_ranks": {
+          "lexical": 1,
+          "semantic": 3
+        },
+        "selected_by_routes": [
+          "lexical",
+          "semantic"
+        ]
+      },
+      {
+        "document_id": "toy_02:d000",
+        "fused_rank": 3,
+        "inclusion_reasons": [
+          "route:lexical",
+          "route:semantic",
+          "rrf_fill"
+        ],
+        "original_index": 3,
+        "route_agreement": 2,
+        "route_ranks": {
+          "lexical": 2,
+          "semantic": 2
+        },
+        "selected_by_routes": [
+          "lexical",
+          "semantic"
+        ]
+      }
+    ],
+    "id": "toy_02",
+    "objective_spec": {
+      "active": [
+        "salience",
+        "facility_coverage",
+        "redundancy"
+      ],
+      "coverage_scope": "full_source_sentences",
+      "importance_aggregation": "mean",
+      "input_mode": "single_document",
+      "output_mode": "multi_sentence",
+      "status": "task_profiled_v1"
+    },
+    "output_budget": {
+      "max_sentences": null,
+      "max_tokens": null,
+      "max_words": 40,
+      "min_words": 0,
+      "require_nonempty": true,
+      "unit": "words"
+    },
+    "selected_indices": [
+      2,
+      3
+    ],
+    "selection_evaluation": {
+      "candidate_relative_indices": [
+        2,
+        3
+      ],
+      "coverage_universe_size": 4,
+      "facility_coverage": 0.5000000000000001,
+      "feasible": true,
+      "redundancy": 0.0,
+      "salience": 1.0,
+      "scalar_utility": 1.4000000000000001,
+      "selected_indices": [
+        2,
+        3
+      ],
+      "selected_sentences": 2,
+      "selected_words": 4,
+      "violations": {
+        "max_length": -36.0,
+        "max_sentences": 0.0,
+        "min_words": -4.0,
+        "nonempty": -1.0
+      }
+    },
+    "summary_sentences": [
+      "Three continues.",
+      "Four concludes."
+    ]
+  },
+  {
+    "candidate_pool": {
+      "actual_size": 1,
+      "allocation": {
+        "actual_size": 1,
+        "candidate_universe_size": 1,
+        "coverage_guard_size": 1,
+        "dropped_proposals_by_route": {
+          "lexical": 0,
+          "semantic": 0
+        },
+        "mandatory_size": 1,
+        "min_per_route": {
+          "lexical": 1,
+          "semantic": 1
+        },
+        "proposal_union_size": 1,
+        "route_top_k": 1,
+        "selected_proposals_by_route": {
+          "lexical": 1,
+          "semantic": 1
+        },
+        "total_cap": 1,
+        "underfilled_by": 0
+      },
+      "configured_sources": [
+        "lexical",
+        "semantic"
+      ],
+      "min_per_route": 1,
+      "route_proposals": {
+        "lexical": [
+          {
+            "original_index": 0,
+            "rank": 1,
+            "raw": 1.0,
+            "reserved": true,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_03:d000:s000000"
+          }
+        ],
+        "semantic": [
+          {
+            "original_index": 0,
+            "rank": 1,
+            "raw": 0.6,
+            "reserved": true,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_03:d000:s000000"
+          }
+        ]
+      },
+      "route_top_k": 4,
+      "selector_salience_source": "base_score",
+      "total_cap": 6
+    },
+    "candidates": [
+      {
+        "document_id": "toy_03:d000",
+        "fused_rank": 1,
+        "inclusion_reasons": [
+          "guard:document",
+          "reserve:lexical",
+          "reserve:semantic",
+          "route:lexical",
+          "route:semantic"
+        ],
+        "original_index": 0,
+        "route_agreement": 2,
+        "route_ranks": {
+          "lexical": 1,
+          "semantic": 1
+        },
+        "selected_by_routes": [
+          "lexical",
+          "semantic"
+        ]
+      }
+    ],
+    "id": "toy_03",
+    "objective_spec": {
+      "active": [
+        "salience",
+        "facility_coverage",
+        "redundancy"
+      ],
+      "coverage_scope": "full_source_sentences",
+      "importance_aggregation": "mean",
+      "input_mode": "single_document",
+      "output_mode": "multi_sentence",
+      "status": "task_profiled_v1"
+    },
+    "output_budget": {
+      "max_sentences": null,
+      "max_tokens": null,
+      "max_words": 40,
+      "min_words": 0,
+      "require_nonempty": true,
+      "unit": "words"
+    },
+    "selected_indices": [
+      0
+    ],
+    "selection_evaluation": {
+      "candidate_relative_indices": [
+        0
+      ],
+      "coverage_universe_size": 1,
+      "facility_coverage": 1.0000000000000002,
+      "feasible": true,
+      "redundancy": 0.0,
+      "salience": 1.0,
+      "scalar_utility": 1.8000000000000003,
+      "selected_indices": [
+        0
+      ],
+      "selected_sentences": 1,
+      "selected_words": 5,
+      "violations": {
+        "max_length": -35.0,
+        "max_sentences": 0.0,
+        "min_words": -5.0,
+        "nonempty": 0.0
+      }
+    },
+    "summary_sentences": [
+      "Only one signal sentence exists."
+    ]
+  },
+  {
+    "candidate_pool": {
+      "actual_size": 2,
+      "allocation": {
+        "actual_size": 2,
+        "candidate_universe_size": 2,
+        "coverage_guard_size": 1,
+        "dropped_proposals_by_route": {
+          "lexical": 0,
+          "semantic": 0
+        },
+        "mandatory_size": 1,
+        "min_per_route": {
+          "lexical": 1,
+          "semantic": 1
+        },
+        "proposal_union_size": 2,
+        "route_top_k": 2,
+        "selected_proposals_by_route": {
+          "lexical": 2,
+          "semantic": 2
+        },
+        "total_cap": 2,
+        "underfilled_by": 0
+      },
+      "configured_sources": [
+        "lexical",
+        "semantic"
+      ],
+      "min_per_route": 1,
+      "route_proposals": {
+        "lexical": [
+          {
+            "original_index": 1,
+            "rank": 1,
+            "raw": 1.0,
+            "reserved": true,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_04:d000:s000001"
+          },
+          {
+            "original_index": 0,
+            "rank": 2,
+            "raw": 0.0,
+            "reserved": false,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_04:d000:s000000"
+          }
+        ],
+        "semantic": [
+          {
+            "original_index": 1,
+            "rank": 1,
+            "raw": 1.0,
+            "reserved": true,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_04:d000:s000001"
+          },
+          {
+            "original_index": 0,
+            "rank": 2,
+            "raw": 0.6,
+            "reserved": false,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_04:d000:s000000"
+          }
+        ]
+      },
+      "route_top_k": 4,
+      "selector_salience_source": "base_score",
+      "total_cap": 6
+    },
+    "candidates": [
+      {
+        "document_id": "toy_04:d000",
+        "fused_rank": 2,
+        "inclusion_reasons": [
+          "route:lexical",
+          "route:semantic",
+          "rrf_fill"
+        ],
+        "original_index": 0,
+        "route_agreement": 2,
+        "route_ranks": {
+          "lexical": 2,
+          "semantic": 2
+        },
+        "selected_by_routes": [
+          "lexical",
+          "semantic"
+        ]
+      },
+      {
+        "document_id": "toy_04:d000",
+        "fused_rank": 1,
+        "inclusion_reasons": [
+          "guard:document",
+          "reserve:lexical",
+          "reserve:semantic",
+          "route:lexical",
+          "route:semantic"
+        ],
+        "original_index": 1,
+        "route_agreement": 2,
+        "route_ranks": {
+          "lexical": 1,
+          "semantic": 1
+        },
+        "selected_by_routes": [
+          "lexical",
+          "semantic"
+        ]
+      }
+    ],
+    "id": "toy_04",
+    "objective_spec": {
+      "active": [
+        "salience",
+        "facility_coverage",
+        "redundancy"
+      ],
+      "coverage_scope": "full_source_sentences",
+      "importance_aggregation": "mean",
+      "input_mode": "single_document",
+      "output_mode": "multi_sentence",
+      "status": "task_profiled_v1"
+    },
+    "output_budget": {
+      "max_sentences": null,
+      "max_tokens": null,
+      "max_words": 40,
+      "min_words": 0,
+      "require_nonempty": true,
+      "unit": "words"
+    },
+    "selected_indices": [
+      1
+    ],
+    "selection_evaluation": {
+      "candidate_relative_indices": [
+        1
+      ],
+      "coverage_universe_size": 2,
+      "facility_coverage": 0.5026642569606766,
+      "feasible": true,
+      "redundancy": 0.0,
+      "salience": 1.0,
+      "scalar_utility": 1.4021314055685412,
+      "selected_indices": [
+        1
+      ],
+      "selected_sentences": 1,
+      "selected_words": 3,
+      "violations": {
+        "max_length": -37.0,
+        "max_sentences": 0.0,
+        "min_words": -3.0,
+        "nonempty": 0.0
+      }
+    },
+    "summary_sentences": [
+      "Short signal tail."
+    ]
+  },
+  {
+    "candidate_pool": {
+      "actual_size": 6,
+      "allocation": {
+        "actual_size": 6,
+        "candidate_universe_size": 6,
+        "coverage_guard_size": 1,
+        "dropped_proposals_by_route": {
+          "lexical": 0,
+          "semantic": 0
+        },
+        "mandatory_size": 3,
+        "min_per_route": {
+          "lexical": 1,
+          "semantic": 1
+        },
+        "proposal_union_size": 6,
+        "route_top_k": 4,
+        "selected_proposals_by_route": {
+          "lexical": 4,
+          "semantic": 4
+        },
+        "total_cap": 6,
+        "underfilled_by": 0
+      },
+      "configured_sources": [
+        "lexical",
+        "semantic"
+      ],
+      "min_per_route": 1,
+      "route_proposals": {
+        "lexical": [
+          {
+            "original_index": 10,
+            "rank": 1,
+            "raw": 1.0,
+            "reserved": false,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_05:d000:s000010"
+          },
+          {
+            "original_index": 11,
+            "rank": 2,
+            "raw": 1.0,
+            "reserved": false,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_05:d000:s000011"
+          },
+          {
+            "original_index": 0,
+            "rank": 3,
+            "raw": 0.5104767249545046,
+            "reserved": true,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_05:d000:s000000"
+          },
+          {
+            "original_index": 3,
+            "rank": 4,
+            "raw": 0.5104767249545046,
+            "reserved": false,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_05:d000:s000003"
+          }
+        ],
+        "semantic": [
+          {
+            "original_index": 11,
+            "rank": 1,
+            "raw": 0.4,
+            "reserved": false,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_05:d000:s000011"
+          },
+          {
+            "original_index": 10,
+            "rank": 2,
+            "raw": 0.363636,
+            "reserved": false,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_05:d000:s000010"
+          },
+          {
+            "original_index": 9,
+            "rank": 3,
+            "raw": 0.327273,
+            "reserved": true,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_05:d000:s000009"
+          },
+          {
+            "original_index": 8,
+            "rank": 4,
+            "raw": 0.290909,
+            "reserved": false,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_05:d000:s000008"
+          }
+        ]
+      },
+      "route_top_k": 4,
+      "selector_salience_source": "base_score",
+      "total_cap": 6
+    },
+    "candidates": [
+      {
+        "document_id": "toy_05:d000",
+        "fused_rank": 6,
+        "inclusion_reasons": [
+          "reserve:lexical",
+          "route:lexical"
+        ],
+        "original_index": 0,
+        "route_agreement": 1,
+        "route_ranks": {
+          "lexical": 3,
+          "semantic": 12
+        },
+        "selected_by_routes": [
+          "lexical"
+        ]
+      },
+      {
+        "document_id": "toy_05:d000",
+        "fused_rank": 5,
+        "inclusion_reasons": [
+          "route:lexical",
+          "rrf_fill"
+        ],
+        "original_index": 3,
+        "route_agreement": 1,
+        "route_ranks": {
+          "lexical": 4,
+          "semantic": 9
+        },
+        "selected_by_routes": [
+          "lexical"
+        ]
+      },
+      {
+        "document_id": "toy_05:d000",
+        "fused_rank": 7,
+        "inclusion_reasons": [
+          "route:semantic",
+          "rrf_fill"
+        ],
+        "original_index": 8,
+        "route_agreement": 1,
+        "route_ranks": {
+          "lexical": 12,
+          "semantic": 4
+        },
+        "selected_by_routes": [
+          "semantic"
+        ]
+      },
+      {
+        "document_id": "toy_05:d000",
+        "fused_rank": 3,
+        "inclusion_reasons": [
+          "reserve:semantic",
+          "route:semantic"
+        ],
+        "original_index": 9,
+        "route_agreement": 1,
+        "route_ranks": {
+          "lexical": 6,
+          "semantic": 3
+        },
+        "selected_by_routes": [
+          "semantic"
+        ]
+      },
+      {
+        "document_id": "toy_05:d000",
+        "fused_rank": 1,
+        "inclusion_reasons": [
+          "guard:document",
+          "route:lexical",
+          "route:semantic"
+        ],
+        "original_index": 10,
+        "route_agreement": 2,
+        "route_ranks": {
+          "lexical": 1,
+          "semantic": 2
+        },
+        "selected_by_routes": [
+          "lexical",
+          "semantic"
+        ]
+      },
+      {
+        "document_id": "toy_05:d000",
+        "fused_rank": 2,
+        "inclusion_reasons": [
+          "route:lexical",
+          "route:semantic",
+          "rrf_fill"
+        ],
+        "original_index": 11,
+        "route_agreement": 2,
+        "route_ranks": {
+          "lexical": 2,
+          "semantic": 1
+        },
+        "selected_by_routes": [
+          "lexical",
+          "semantic"
+        ]
+      }
+    ],
+    "id": "toy_05",
+    "objective_spec": {
+      "active": [
+        "salience",
+        "facility_coverage",
+        "redundancy"
+      ],
+      "coverage_scope": "full_source_sentences",
+      "importance_aggregation": "mean",
+      "input_mode": "single_document",
+      "output_mode": "multi_sentence",
+      "status": "task_profiled_v1"
+    },
+    "output_budget": {
+      "max_sentences": null,
+      "max_tokens": null,
+      "max_words": 40,
+      "min_words": 0,
+      "require_nonempty": true,
+      "unit": "words"
+    },
+    "selected_indices": [
+      10
+    ],
+    "selection_evaluation": {
+      "candidate_relative_indices": [
+        4
+      ],
+      "coverage_universe_size": 12,
+      "facility_coverage": 0.40678713819026974,
+      "feasible": true,
+      "redundancy": 0.0,
+      "salience": 1.0,
+      "scalar_utility": 1.325429710552216,
+      "selected_indices": [
+        10
+      ],
+      "selected_sentences": 1,
+      "selected_words": 3,
+      "violations": {
+        "max_length": -37.0,
+        "max_sentences": 0.0,
+        "min_words": -3.0,
+        "nonempty": 0.0
+      }
+    },
+    "summary_sentences": [
+      "Short line 10."
+    ]
+  },
+  {
+    "candidate_pool": {
+      "actual_size": 4,
+      "allocation": {
+        "actual_size": 4,
+        "candidate_universe_size": 4,
+        "coverage_guard_size": 1,
+        "dropped_proposals_by_route": {
+          "lexical": 0,
+          "semantic": 0
+        },
+        "mandatory_size": 2,
+        "min_per_route": {
+          "lexical": 1,
+          "semantic": 1
+        },
+        "proposal_union_size": 4,
+        "route_top_k": 4,
+        "selected_proposals_by_route": {
+          "lexical": 4,
+          "semantic": 4
+        },
+        "total_cap": 4,
+        "underfilled_by": 0
+      },
+      "configured_sources": [
+        "lexical",
+        "semantic"
+      ],
+      "min_per_route": 1,
+      "route_proposals": {
+        "lexical": [
+          {
+            "original_index": 3,
+            "rank": 1,
+            "raw": 1.0,
+            "reserved": true,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_06:d000:s000003"
+          },
+          {
+            "original_index": 0,
+            "rank": 2,
+            "raw": 0.0,
+            "reserved": false,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_06:d000:s000000"
+          },
+          {
+            "original_index": 1,
+            "rank": 3,
+            "raw": 0.0,
+            "reserved": false,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_06:d000:s000001"
+          },
+          {
+            "original_index": 2,
+            "rank": 4,
+            "raw": 0.0,
+            "reserved": false,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_06:d000:s000002"
+          }
+        ],
+        "semantic": [
+          {
+            "original_index": 2,
+            "rank": 1,
+            "raw": 0.866667,
+            "reserved": true,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_06:d000:s000002"
+          },
+          {
+            "original_index": 1,
+            "rank": 2,
+            "raw": 0.733333,
+            "reserved": false,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_06:d000:s000001"
+          },
+          {
+            "original_index": 0,
+            "rank": 3,
+            "raw": 0.6,
+            "reserved": false,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_06:d000:s000000"
+          },
+          {
+            "original_index": 3,
+            "rank": 4,
+            "raw": 0.4,
+            "reserved": false,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_06:d000:s000003"
+          }
+        ]
+      },
+      "route_top_k": 4,
+      "selector_salience_source": "base_score",
+      "total_cap": 6
+    },
+    "candidates": [
+      {
+        "document_id": "toy_06:d000",
+        "fused_rank": 3,
+        "inclusion_reasons": [
+          "route:lexical",
+          "route:semantic",
+          "rrf_fill"
+        ],
+        "original_index": 0,
+        "route_agreement": 2,
+        "route_ranks": {
+          "lexical": 2,
+          "semantic": 3
+        },
+        "selected_by_routes": [
+          "lexical",
+          "semantic"
+        ]
+      },
+      {
+        "document_id": "toy_06:d000",
+        "fused_rank": 4,
+        "inclusion_reasons": [
+          "route:lexical",
+          "route:semantic",
+          "rrf_fill"
+        ],
+        "original_index": 1,
+        "route_agreement": 2,
+        "route_ranks": {
+          "lexical": 3,
+          "semantic": 2
+        },
+        "selected_by_routes": [
+          "lexical",
+          "semantic"
+        ]
+      },
+      {
+        "document_id": "toy_06:d000",
+        "fused_rank": 1,
+        "inclusion_reasons": [
+          "guard:document",
+          "reserve:semantic",
+          "route:lexical",
+          "route:semantic"
+        ],
+        "original_index": 2,
+        "route_agreement": 2,
+        "route_ranks": {
+          "lexical": 4,
+          "semantic": 1
+        },
+        "selected_by_routes": [
+          "lexical",
+          "semantic"
+        ]
+      },
+      {
+        "document_id": "toy_06:d000",
+        "fused_rank": 2,
+        "inclusion_reasons": [
+          "reserve:lexical",
+          "route:lexical",
+          "route:semantic"
+        ],
+        "original_index": 3,
+        "route_agreement": 2,
+        "route_ranks": {
+          "lexical": 1,
+          "semantic": 4
+        },
+        "selected_by_routes": [
+          "lexical",
+          "semantic"
+        ]
+      }
+    ],
+    "id": "toy_06",
+    "objective_spec": {
+      "active": [
+        "salience",
+        "facility_coverage",
+        "redundancy"
+      ],
+      "coverage_scope": "full_source_sentences",
+      "importance_aggregation": "mean",
+      "input_mode": "single_document",
+      "output_mode": "multi_sentence",
+      "status": "task_profiled_v1"
+    },
+    "output_budget": {
+      "max_sentences": null,
+      "max_tokens": null,
+      "max_words": 40,
+      "min_words": 0,
+      "require_nonempty": true,
+      "unit": "words"
+    },
+    "selected_indices": [
+      0,
+      3
+    ],
+    "selection_evaluation": {
+      "candidate_relative_indices": [
+        0,
+        3
+      ],
+      "coverage_universe_size": 4,
+      "facility_coverage": 0.9174454952502047,
+      "feasible": true,
+      "redundancy": 0.0,
+      "salience": 0.5,
+      "scalar_utility": 1.2339563962001638,
+      "selected_indices": [
+        0,
+        3
+      ],
+      "selected_sentences": 2,
+      "selected_words": 9,
+      "violations": {
+        "max_length": -31.0,
+        "max_sentences": 0.0,
+        "min_words": -9.0,
+        "nonempty": -1.0
+      }
+    },
+    "summary_sentences": [
+      "The signal repeats often here.",
+      "A different closing remark."
+    ]
+  },
+  {
+    "candidate_pool": {
+      "actual_size": 4,
+      "allocation": {
+        "actual_size": 4,
+        "candidate_universe_size": 4,
+        "coverage_guard_size": 1,
+        "dropped_proposals_by_route": {
+          "lexical": 0,
+          "semantic": 0
+        },
+        "mandatory_size": 2,
+        "min_per_route": {
+          "lexical": 1,
+          "semantic": 1
+        },
+        "proposal_union_size": 4,
+        "route_top_k": 4,
+        "selected_proposals_by_route": {
+          "lexical": 4,
+          "semantic": 4
+        },
+        "total_cap": 4,
+        "underfilled_by": 0
+      },
+      "configured_sources": [
+        "lexical",
+        "semantic"
+      ],
+      "min_per_route": 1,
+      "route_proposals": {
+        "lexical": [
+          {
+            "original_index": 0,
+            "rank": 1,
+            "raw": 1.0,
+            "reserved": true,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_07:d000:s000000"
+          },
+          {
+            "original_index": 3,
+            "rank": 2,
+            "raw": 0.5256035714615218,
+            "reserved": false,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_07:d000:s000003"
+          },
+          {
+            "original_index": 1,
+            "rank": 3,
+            "raw": 0.298879167158895,
+            "reserved": false,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_07:d000:s000001"
+          },
+          {
+            "original_index": 2,
+            "rank": 4,
+            "raw": 0.0,
+            "reserved": false,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_07:d000:s000002"
+          }
+        ],
+        "semantic": [
+          {
+            "original_index": 3,
+            "rank": 1,
+            "raw": 1.0,
+            "reserved": true,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_07:d000:s000003"
+          },
+          {
+            "original_index": 2,
+            "rank": 2,
+            "raw": 0.266667,
+            "reserved": false,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_07:d000:s000002"
+          },
+          {
+            "original_index": 1,
+            "rank": 3,
+            "raw": 0.133333,
+            "reserved": false,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_07:d000:s000001"
+          },
+          {
+            "original_index": 0,
+            "rank": 4,
+            "raw": 0.0,
+            "reserved": false,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_07:d000:s000000"
+          }
+        ]
+      },
+      "route_top_k": 4,
+      "selector_salience_source": "base_score",
+      "total_cap": 6
+    },
+    "candidates": [
+      {
+        "document_id": "toy_07:d000",
+        "fused_rank": 2,
+        "inclusion_reasons": [
+          "reserve:lexical",
+          "route:lexical",
+          "route:semantic"
+        ],
+        "original_index": 0,
+        "route_agreement": 2,
+        "route_ranks": {
+          "lexical": 1,
+          "semantic": 4
+        },
+        "selected_by_routes": [
+          "lexical",
+          "semantic"
+        ]
+      },
+      {
+        "document_id": "toy_07:d000",
+        "fused_rank": 4,
+        "inclusion_reasons": [
+          "route:lexical",
+          "route:semantic",
+          "rrf_fill"
+        ],
+        "original_index": 1,
+        "route_agreement": 2,
+        "route_ranks": {
+          "lexical": 3,
+          "semantic": 3
+        },
+        "selected_by_routes": [
+          "lexical",
+          "semantic"
+        ]
+      },
+      {
+        "document_id": "toy_07:d000",
+        "fused_rank": 3,
+        "inclusion_reasons": [
+          "route:lexical",
+          "route:semantic",
+          "rrf_fill"
+        ],
+        "original_index": 2,
+        "route_agreement": 2,
+        "route_ranks": {
+          "lexical": 4,
+          "semantic": 2
+        },
+        "selected_by_routes": [
+          "lexical",
+          "semantic"
+        ]
+      },
+      {
+        "document_id": "toy_07:d000",
+        "fused_rank": 1,
+        "inclusion_reasons": [
+          "guard:document",
+          "reserve:semantic",
+          "route:lexical",
+          "route:semantic"
+        ],
+        "original_index": 3,
+        "route_agreement": 2,
+        "route_ranks": {
+          "lexical": 2,
+          "semantic": 1
+        },
+        "selected_by_routes": [
+          "lexical",
+          "semantic"
+        ]
+      }
+    ],
+    "id": "toy_07",
+    "objective_spec": {
+      "active": [
+        "salience",
+        "facility_coverage",
+        "redundancy"
+      ],
+      "coverage_scope": "full_source_sentences",
+      "importance_aggregation": "mean",
+      "input_mode": "single_document",
+      "output_mode": "multi_sentence",
+      "status": "task_profiled_v1"
+    },
+    "output_budget": {
+      "max_sentences": null,
+      "max_tokens": null,
+      "max_words": 40,
+      "min_words": 0,
+      "require_nonempty": true,
+      "unit": "words"
+    },
+    "selected_indices": [
+      0
+    ],
+    "selection_evaluation": {
+      "candidate_relative_indices": [
+        0
+      ],
+      "coverage_universe_size": 4,
+      "facility_coverage": 0.25000000000000006,
+      "feasible": true,
+      "redundancy": 0.0,
+      "salience": 1.0,
+      "scalar_utility": 1.2000000000000002,
+      "selected_indices": [
+        0
+      ],
+      "selected_sentences": 1,
+      "selected_words": 6,
+      "violations": {
+        "max_length": -34.0,
+        "max_sentences": 0.0,
+        "min_words": -6.0,
+        "nonempty": 0.0
+      }
+    },
+    "summary_sentences": [
+      "Rare vocabulary dominates this opening clause."
+    ]
+  },
+  {
+    "candidate_pool": {
+      "actual_size": 2,
+      "allocation": {
+        "actual_size": 2,
+        "candidate_universe_size": 2,
+        "coverage_guard_size": 1,
+        "dropped_proposals_by_route": {
+          "lexical": 0,
+          "semantic": 0
+        },
+        "mandatory_size": 2,
+        "min_per_route": {
+          "lexical": 1,
+          "semantic": 1
+        },
+        "proposal_union_size": 2,
+        "route_top_k": 2,
+        "selected_proposals_by_route": {
+          "lexical": 2,
+          "semantic": 2
+        },
+        "total_cap": 2,
+        "underfilled_by": 0
+      },
+      "configured_sources": [
+        "lexical",
+        "semantic"
+      ],
+      "min_per_route": 1,
+      "route_proposals": {
+        "lexical": [
+          {
+            "original_index": 0,
+            "rank": 1,
+            "raw": 1.0,
+            "reserved": true,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_08:d000:s000000"
+          },
+          {
+            "original_index": 1,
+            "rank": 2,
+            "raw": 1.0,
+            "reserved": false,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_08:d000:s000001"
+          }
+        ],
+        "semantic": [
+          {
+            "original_index": 1,
+            "rank": 1,
+            "raw": 0.4,
+            "reserved": true,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_08:d000:s000001"
+          },
+          {
+            "original_index": 0,
+            "rank": 2,
+            "raw": 0.0,
+            "reserved": false,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_08:d000:s000000"
+          }
+        ]
+      },
+      "route_top_k": 4,
+      "selector_salience_source": "base_score",
+      "total_cap": 6
+    },
+    "candidates": [
+      {
+        "document_id": "toy_08:d000",
+        "fused_rank": 1,
+        "inclusion_reasons": [
+          "guard:document",
+          "reserve:lexical",
+          "route:lexical",
+          "route:semantic"
+        ],
+        "original_index": 0,
+        "route_agreement": 2,
+        "route_ranks": {
+          "lexical": 1,
+          "semantic": 2
+        },
+        "selected_by_routes": [
+          "lexical",
+          "semantic"
+        ]
+      },
+      {
+        "document_id": "toy_08:d000",
+        "fused_rank": 2,
+        "inclusion_reasons": [
+          "reserve:semantic",
+          "route:lexical",
+          "route:semantic"
+        ],
+        "original_index": 1,
+        "route_agreement": 2,
+        "route_ranks": {
+          "lexical": 2,
+          "semantic": 1
+        },
+        "selected_by_routes": [
+          "lexical",
+          "semantic"
+        ]
+      }
+    ],
+    "id": "toy_08",
+    "objective_spec": {
+      "active": [
+        "salience",
+        "facility_coverage",
+        "redundancy"
+      ],
+      "coverage_scope": "full_source_sentences",
+      "importance_aggregation": "mean",
+      "input_mode": "single_document",
+      "output_mode": "multi_sentence",
+      "status": "task_profiled_v1"
+    },
+    "output_budget": {
+      "max_sentences": null,
+      "max_tokens": null,
+      "max_words": 40,
+      "min_words": 0,
+      "require_nonempty": true,
+      "unit": "words"
+    },
+    "selected_indices": [
+      0,
+      1
+    ],
+    "selection_evaluation": {
+      "candidate_relative_indices": [
+        0,
+        1
+      ],
+      "coverage_universe_size": 2,
+      "facility_coverage": 1.0000000000000002,
+      "feasible": true,
+      "redundancy": 0.0,
+      "salience": 1.0,
+      "scalar_utility": 1.8000000000000003,
+      "selected_indices": [
+        0,
+        1
+      ],
+      "selected_sentences": 2,
+      "selected_words": 4,
+      "violations": {
+        "max_length": -36.0,
+        "max_sentences": 0.0,
+        "min_words": -4.0,
+        "nonempty": -1.0
+      }
+    },
+    "summary_sentences": [
+      "First signal.",
+      "Second line."
+    ]
+  },
+  {
+    "candidate_pool": {
+      "actual_size": 4,
+      "allocation": {
+        "actual_size": 4,
+        "candidate_universe_size": 4,
+        "coverage_guard_size": 3,
+        "dropped_proposals_by_route": {
+          "lexical": 0,
+          "semantic": 0
+        },
+        "mandatory_size": 3,
+        "min_per_route": {
+          "lexical": 1,
+          "semantic": 1
+        },
+        "proposal_union_size": 4,
+        "route_top_k": 4,
+        "selected_proposals_by_route": {
+          "lexical": 4,
+          "semantic": 4
+        },
+        "total_cap": 6,
+        "underfilled_by": 2
+      },
+      "configured_sources": [
+        "lexical",
+        "semantic"
+      ],
+      "min_per_route": 1,
+      "route_proposals": {
+        "lexical": [
+          {
+            "original_index": 4,
+            "rank": 1,
+            "raw": 1.0,
+            "reserved": true,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_09:d002:s000000"
+          },
+          {
+            "original_index": 5,
+            "rank": 2,
+            "raw": 0.7089935766975686,
+            "reserved": false,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_09:d002:s000001"
+          },
+          {
+            "original_index": 0,
+            "rank": 3,
+            "raw": 0.42630877309184007,
+            "reserved": false,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_09:d000:s000000"
+          },
+          {
+            "original_index": 2,
+            "rank": 4,
+            "raw": 0.42630877309184007,
+            "reserved": false,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_09:d001:s000000"
+          }
+        ],
+        "semantic": [
+          {
+            "original_index": 4,
+            "rank": 1,
+            "raw": 0.92,
+            "reserved": true,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_09:d002:s000000"
+          },
+          {
+            "original_index": 2,
+            "rank": 2,
+            "raw": 0.76,
+            "reserved": false,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_09:d001:s000000"
+          },
+          {
+            "original_index": 0,
+            "rank": 3,
+            "raw": 0.6,
+            "reserved": false,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_09:d000:s000000"
+          },
+          {
+            "original_index": 5,
+            "rank": 4,
+            "raw": 0.4,
+            "reserved": false,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_09:d002:s000001"
+          }
+        ]
+      },
+      "route_top_k": 4,
+      "selector_salience_source": "base_score",
+      "total_cap": 6
+    },
+    "candidates": [
+      {
+        "document_id": "toy_09:d000",
+        "fused_rank": 4,
+        "inclusion_reasons": [
+          "guard:document",
+          "route:lexical",
+          "route:semantic"
+        ],
+        "original_index": 0,
+        "route_agreement": 2,
+        "route_ranks": {
+          "lexical": 3,
+          "semantic": 3
+        },
+        "selected_by_routes": [
+          "lexical",
+          "semantic"
+        ]
+      },
+      {
+        "document_id": "toy_09:d001",
+        "fused_rank": 2,
+        "inclusion_reasons": [
+          "guard:document",
+          "route:lexical",
+          "route:semantic"
+        ],
+        "original_index": 2,
+        "route_agreement": 2,
+        "route_ranks": {
+          "lexical": 4,
+          "semantic": 2
+        },
+        "selected_by_routes": [
+          "lexical",
+          "semantic"
+        ]
+      },
+      {
+        "document_id": "toy_09:d002",
+        "fused_rank": 1,
+        "inclusion_reasons": [
+          "guard:document",
+          "reserve:lexical",
+          "reserve:semantic",
+          "route:lexical",
+          "route:semantic"
+        ],
+        "original_index": 4,
+        "route_agreement": 2,
+        "route_ranks": {
+          "lexical": 1,
+          "semantic": 1
+        },
+        "selected_by_routes": [
+          "lexical",
+          "semantic"
+        ]
+      },
+      {
+        "document_id": "toy_09:d002",
+        "fused_rank": 3,
+        "inclusion_reasons": [
+          "route:lexical",
+          "route:semantic",
+          "rrf_fill"
+        ],
+        "original_index": 5,
+        "route_agreement": 2,
+        "route_ranks": {
+          "lexical": 2,
+          "semantic": 4
+        },
+        "selected_by_routes": [
+          "lexical",
+          "semantic"
+        ]
+      }
+    ],
+    "id": "toy_09",
+    "objective_spec": {
+      "active": [
+        "salience",
+        "facility_coverage",
+        "redundancy"
+      ],
+      "coverage_scope": "full_source_sentences",
+      "importance_aggregation": "mean",
+      "input_mode": "multi_document",
+      "output_mode": "multi_sentence",
+      "status": "task_profiled_v1"
+    },
+    "output_budget": {
+      "max_sentences": null,
+      "max_tokens": null,
+      "max_words": 40,
+      "min_words": 0,
+      "require_nonempty": true,
+      "unit": "words"
+    },
+    "selected_indices": [
+      4
+    ],
+    "selection_evaluation": {
+      "candidate_relative_indices": [
+        2
+      ],
+      "coverage_universe_size": 6,
+      "facility_coverage": 0.511505086717788,
+      "feasible": true,
+      "redundancy": 0.0,
+      "salience": 1.0,
+      "scalar_utility": 1.4092040693742305,
+      "selected_indices": [
+        4
+      ],
+      "selected_sentences": 1,
+      "selected_words": 4,
+      "violations": {
+        "max_length": -36.0,
+        "max_sentences": 0.0,
+        "min_words": -4.0,
+        "nonempty": 0.0
+      }
+    },
+    "summary_sentences": [
+      "Doc three signal opening."
+    ]
+  },
+  {
+    "candidate_pool": {
+      "actual_size": 3,
+      "allocation": {
+        "actual_size": 3,
+        "candidate_universe_size": 3,
+        "coverage_guard_size": 1,
+        "dropped_proposals_by_route": {
+          "lexical": 0,
+          "semantic": 0
+        },
+        "mandatory_size": 1,
+        "min_per_route": {
+          "lexical": 1,
+          "semantic": 1
+        },
+        "proposal_union_size": 3,
+        "route_top_k": 3,
+        "selected_proposals_by_route": {
+          "lexical": 3,
+          "semantic": 3
+        },
+        "total_cap": 3,
+        "underfilled_by": 0
+      },
+      "configured_sources": [
+        "lexical",
+        "semantic"
+      ],
+      "min_per_route": 1,
+      "route_proposals": {
+        "lexical": [
+          {
+            "original_index": 0,
+            "rank": 1,
+            "raw": 1.0,
+            "reserved": true,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_10:d000:s000000"
+          },
+          {
+            "original_index": 1,
+            "rank": 2,
+            "raw": 0.0,
+            "reserved": false,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_10:d000:s000001"
+          },
+          {
+            "original_index": 2,
+            "rank": 3,
+            "raw": 0.0,
+            "reserved": false,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_10:d000:s000002"
+          }
+        ],
+        "semantic": [
+          {
+            "original_index": 0,
+            "rank": 1,
+            "raw": 0.6,
+            "reserved": true,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_10:d000:s000000"
+          },
+          {
+            "original_index": 2,
+            "rank": 2,
+            "raw": 0.4,
+            "reserved": false,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_10:d000:s000002"
+          },
+          {
+            "original_index": 1,
+            "rank": 3,
+            "raw": 0.2,
+            "reserved": false,
+            "selected_in_final_pool": true,
+            "sentence_id": "toy_10:d000:s000001"
+          }
+        ]
+      },
+      "route_top_k": 4,
+      "selector_salience_source": "base_score",
+      "total_cap": 6
+    },
+    "candidates": [
+      {
+        "document_id": "toy_10:d000",
+        "fused_rank": 1,
+        "inclusion_reasons": [
+          "guard:document",
+          "reserve:lexical",
+          "reserve:semantic",
+          "route:lexical",
+          "route:semantic"
+        ],
+        "original_index": 0,
+        "route_agreement": 2,
+        "route_ranks": {
+          "lexical": 1,
+          "semantic": 1
+        },
+        "selected_by_routes": [
+          "lexical",
+          "semantic"
+        ]
+      },
+      {
+        "document_id": "toy_10:d000",
+        "fused_rank": 2,
+        "inclusion_reasons": [
+          "route:lexical",
+          "route:semantic",
+          "rrf_fill"
+        ],
+        "original_index": 1,
+        "route_agreement": 2,
+        "route_ranks": {
+          "lexical": 2,
+          "semantic": 3
+        },
+        "selected_by_routes": [
+          "lexical",
+          "semantic"
+        ]
+      },
+      {
+        "document_id": "toy_10:d000",
+        "fused_rank": 3,
+        "inclusion_reasons": [
+          "route:lexical",
+          "route:semantic",
+          "rrf_fill"
+        ],
+        "original_index": 2,
+        "route_agreement": 2,
+        "route_ranks": {
+          "lexical": 3,
+          "semantic": 2
+        },
+        "selected_by_routes": [
+          "lexical",
+          "semantic"
+        ]
+      }
+    ],
+    "id": "toy_10",
+    "objective_spec": {
+      "active": [
+        "salience",
+        "facility_coverage",
+        "redundancy"
+      ],
+      "coverage_scope": "full_source_sentences",
+      "importance_aggregation": "mean",
+      "input_mode": "single_document",
+      "output_mode": "multi_sentence",
+      "status": "task_profiled_v1"
+    },
+    "output_budget": {
+      "max_sentences": null,
+      "max_tokens": null,
+      "max_words": 40,
+      "min_words": 0,
+      "require_nonempty": true,
+      "unit": "words"
+    },
+    "selected_indices": [
+      0
+    ],
+    "selection_evaluation": {
+      "candidate_relative_indices": [
+        0
+      ],
+      "coverage_universe_size": 3,
+      "facility_coverage": 0.3333333333333334,
+      "feasible": true,
+      "redundancy": 0.0,
+      "salience": 1.0,
+      "scalar_utility": 1.2666666666666668,
+      "selected_indices": [
+        0
+      ],
+      "selected_sentences": 1,
+      "selected_words": 8,
+      "violations": {
+        "max_length": -32.0,
+        "max_sentences": 0.0,
+        "min_words": -8.0,
+        "nonempty": 0.0
+      }
+    },
+    "summary_sentences": [
+      "Dr. Smith reported a 3.5 percent signal increase."
+    ]
+  }
+]
