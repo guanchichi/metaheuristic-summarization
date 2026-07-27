@@ -28,7 +28,7 @@ DATASET_FILES = {
     "validation": ("multi_news-validation.parquet",),
     "test": ("multi_news-test.parquet",),
 }
-PREPROCESSOR_VERSION = "multinews-canonical-v1"
+PREPROCESSOR_VERSION = "multinews-canonical-v3"
 DOCUMENT_SEPARATOR = "|||||"
 _SEPARATOR_RE = re.compile(r"\s*\|\|\|\|\|\s*")
 _LEADING_SUMMARY_MARKER_RE = re.compile(r"^\s*[-–—]\s+")
@@ -36,6 +36,16 @@ _LEADING_SUMMARY_MARKER_RE = re.compile(r"^\s*[-–—]\s+")
 
 class MultiNewsPreprocessingError(ValueError):
     """Raised when an input row cannot be transformed without guessing."""
+
+
+class DegenerateRowError(MultiNewsPreprocessingError):
+    """Raised when a row has no usable source content after dropping empty segments.
+
+    This is the only exception class the ``main`` write loop is allowed to catch:
+    it marks rows that must be excluded from the canonical output (and recorded in
+    the manifest), as distinct from every other error class, which must keep
+    failing loud and abort the run.
+    """
 
 
 def _sha256(text: str) -> str:
@@ -95,36 +105,61 @@ def resolve_data_files(
     return [f"{root}/{filename}" for filename in DATASET_FILES[split]]
 
 
-def split_source_documents(raw_cluster: str) -> List[Dict[str, Any]]:
-    """Split on the official delimiter while preserving raw character spans."""
+def split_source_documents(
+    raw_cluster: str,
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """Split on the official delimiter while preserving raw character spans.
 
-    if not isinstance(raw_cluster, str) or not raw_cluster.strip():
-        raise MultiNewsPreprocessingError("document field must be a non-empty string")
+    A single source document is a normal property of this dataset (some clusters
+    genuinely have one retrieved article), so it is not an error condition here.
+    Segments that are empty after stripping whitespace (e.g. a leading/trailing
+    stray ``|||||``) are dropped rather than raised on, and reported in the second
+    return value for the caller to record. If every segment turns out empty, the
+    row has no usable content at all; that is a :class:`DegenerateRowError`, not a
+    generic parsing error, because it is a distinct, expected-to-happen data
+    condition that callers must be able to catch narrowly.
+    """
+
+    if not isinstance(raw_cluster, str):
+        raise MultiNewsPreprocessingError("document field must be a string")
 
     documents: List[Dict[str, Any]] = []
+    dropped_segments: List[Dict[str, Any]] = []
     cursor = 0
     matches = list(_SEPARATOR_RE.finditer(raw_cluster))
     boundaries = [(match.start(), match.end()) for match in matches]
     boundaries.append((len(raw_cluster), len(raw_cluster)))
-    for boundary_start, boundary_end in boundaries:
+    for raw_segment_position, (boundary_start, boundary_end) in enumerate(boundaries):
         raw_slice = raw_cluster[cursor:boundary_start]
         leading = len(raw_slice) - len(raw_slice.lstrip())
         trailing = len(raw_slice.rstrip())
         text = raw_slice.strip()
         if not text:
-            raise MultiNewsPreprocessingError(
-                f"empty source document around raw character offset {cursor}"
+            dropped_segments.append(
+                {
+                    "raw_segment_position": raw_segment_position,
+                    "raw_char_start": cursor,
+                    "raw_char_end": boundary_start,
+                }
             )
-        start = cursor + leading
-        end = cursor + trailing
-        documents.append({"text": text, "source_char_start": start, "source_char_end": end})
+        else:
+            start = cursor + leading
+            end = cursor + trailing
+            documents.append(
+                {
+                    "text": text,
+                    "source_char_start": start,
+                    "source_char_end": end,
+                    "raw_segment_position": raw_segment_position,
+                }
+            )
         cursor = boundary_end
 
-    if len(documents) < 2:
-        raise MultiNewsPreprocessingError(
-            f"expected at least two source documents separated by {DOCUMENT_SEPARATOR!r}"
+    if not documents:
+        raise DegenerateRowError(
+            f"all {len(boundaries)} source segment(s) were empty after stripping whitespace"
         )
-    return documents
+    return documents, dropped_segments
 
 
 def segment_document(
@@ -170,7 +205,6 @@ def process_example(
     dataset_data_dir: str = DATASET_DATA_DIR,
     min_words: int = 1,
     is_debug_subset: bool = False,
-    allow_replacement_character: bool = False,
 ) -> Dict[str, Any]:
     """Convert one official Multi-News row to a canonical DocumentExample."""
 
@@ -178,13 +212,15 @@ def process_example(
     raw_summary = example.get("summary")
     if not isinstance(raw_cluster, str) or not isinstance(raw_summary, str):
         raise MultiNewsPreprocessingError("row must contain string 'document' and 'summary' fields")
-    if not allow_replacement_character and "\ufffd" in raw_cluster + raw_summary:
-        raise MultiNewsPreprocessingError(
-            "row contains Unicode replacement character U+FFFD; source must be repaired or "
-            "the explicit diagnostic override must be used"
-        )
 
-    source_documents = split_source_documents(raw_cluster)
+    # U+FFFD (the Unicode replacement character) marks upstream text-decoding damage
+    # in ~1.3% of rows. It is a per-row data-quality fact, not a reason to abort the
+    # whole preprocessing run: we record it on the row instead of raising, so the
+    # ~98.7% of clean rows don't lose their canonical status to an all-or-nothing flag.
+    document_replacement_count = raw_cluster.count("\ufffd")
+    summary_replacement_count = raw_summary.count("\ufffd")
+
+    source_documents, dropped_segments = split_source_documents(raw_cluster)
     document_sentences: List[Sequence[str]] = []
     sentence_metadata: List[Sequence[Mapping[str, Any]]] = []
     document_metadata: List[Mapping[str, Any]] = []
@@ -195,6 +231,7 @@ def process_example(
         document_metadata.append(
             {
                 "original_document_position": source_order,
+                "raw_segment_position": source_document["raw_segment_position"],
                 "source_char_start": source_document["source_char_start"],
                 "source_char_end": source_document["source_char_end"],
                 "raw_document_sha256": _sha256(source_document["text"]),
@@ -227,9 +264,70 @@ def process_example(
             "document_separator": DOCUMENT_SEPARATOR,
             "min_words": min_words,
             "is_debug_subset": is_debug_subset,
-            "replacement_character_override": allow_replacement_character,
+            "contains_replacement_character": bool(
+                document_replacement_count or summary_replacement_count
+            ),
+            "replacement_character_count": {
+                "document": document_replacement_count,
+                "summary": summary_replacement_count,
+            },
+            "n_source_documents": len(source_documents),
+            "dropped_empty_segments": {
+                "count": len(dropped_segments),
+                "segments": dropped_segments,
+            },
         },
     )
+
+
+def build_canonical_rows(
+    dataset,
+    *,
+    split: str,
+    dataset_id: str = DATASET_ID,
+    dataset_revision: str = DATASET_REVISION,
+    dataset_data_dir: str = DATASET_DATA_DIR,
+    min_words: int = 1,
+    is_debug_subset: bool = False,
+    show_progress: bool = True,
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """Process every row, routing degenerate rows to an exclusion list instead of output.
+
+    Only :class:`DegenerateRowError` is caught here; every other error class keeps
+    propagating so the run aborts loudly instead of silently dropping content.
+    """
+
+    iterator = enumerate(dataset)
+    if show_progress:
+        iterator = tqdm(iterator, total=len(dataset), desc="Multi-News")
+
+    written_rows: List[Dict[str, Any]] = []
+    excluded_rows: List[Dict[str, Any]] = []
+    for index, example in iterator:
+        try:
+            row = process_example(
+                example,
+                split=split,
+                row_index=index,
+                dataset_id=dataset_id,
+                dataset_revision=dataset_revision,
+                dataset_data_dir=dataset_data_dir,
+                min_words=min_words,
+                is_debug_subset=is_debug_subset,
+            )
+        except DegenerateRowError as exc:
+            excluded_rows.append(
+                {
+                    "source_row_index": index,
+                    "split": split,
+                    "reason": str(exc),
+                    "preprocessor_version": PREPROCESSOR_VERSION,
+                    "raw_cluster_sha256": _sha256(example.get("document") or ""),
+                }
+            )
+            continue
+        written_rows.append(row)
+    return written_rows, excluded_rows
 
 
 def main() -> None:
@@ -241,7 +339,6 @@ def main() -> None:
     parser.add_argument("--data_dir", default=DATASET_DATA_DIR)
     parser.add_argument("--min_words", type=int, default=1)
     parser.add_argument("--limit", type=int, default=None, help="debug subset only")
-    parser.add_argument("--allow_replacement_character", action="store_true")
     args = parser.parse_args()
 
     if args.min_words != 1 and args.limit is None:
@@ -278,22 +375,27 @@ def main() -> None:
         "data", "processed", f"multi_news_{args.split}_canonical{suffix}.jsonl"
     )
     ensure_dir(os.path.dirname(out_path) or ".")
-    rows = (
-        process_example(
-            example,
-            split=args.split,
-            row_index=index,
-            dataset_id=args.dataset_id,
-            dataset_revision=args.revision,
-            dataset_data_dir=args.data_dir,
-            min_words=args.min_words,
-            is_debug_subset=args.limit is not None,
-            allow_replacement_character=args.allow_replacement_character,
-        )
-        for index, example in tqdm(enumerate(dataset), total=len(dataset), desc="Multi-News")
+
+    written_rows, excluded_rows = build_canonical_rows(
+        dataset,
+        split=args.split,
+        dataset_id=args.dataset_id,
+        dataset_revision=args.revision,
+        dataset_data_dir=args.data_dir,
+        min_words=args.min_words,
+        is_debug_subset=args.limit is not None,
     )
-    write_jsonl_atomic(out_path, rows)
-    print(f"Wrote {len(dataset)} canonical rows to {out_path}")
+
+    write_jsonl_atomic(out_path, written_rows)
+
+    manifest_root, manifest_ext = os.path.splitext(out_path)
+    manifest_path = f"{manifest_root}_excluded_rows_manifest{manifest_ext or '.jsonl'}"
+    write_jsonl_atomic(manifest_path, excluded_rows)
+
+    excluded_indices = [row["source_row_index"] for row in excluded_rows]
+    print(f"Wrote {len(written_rows)} canonical rows to {out_path}")
+    print(f"Excluded {len(excluded_rows)} degenerate rows; manifest at {manifest_path}")
+    print(f"Excluded row indices: {excluded_indices}")
 
 
 if __name__ == "__main__":

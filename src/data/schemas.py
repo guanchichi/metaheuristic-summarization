@@ -173,8 +173,25 @@ def validate_document_example(example: Mapping[str, Any]) -> None:
         raise SchemaValidationError("documents must be a non-empty list")
     if task_profile.get("input_mode") == "single_document" and len(documents) != 1:
         raise SchemaValidationError("single_document examples must contain exactly one document")
-    if task_profile.get("input_mode") == "multi_document" and len(documents) < 2:
-        raise SchemaValidationError("multi_document examples must contain at least two documents")
+    if task_profile.get("input_mode") == "multi_document" and len(documents) == 1:
+        # multi_document is a dataset-level task protocol, not a per-row fact: some
+        # source clusters genuinely contain a single document. We still require an
+        # explicit metadata.n_source_documents == 1 marker so that a real singleton
+        # cluster can be told apart from an upstream bug that flattened multiple
+        # documents into one (this happened before; see docs/research/ARCHITECTURE.md
+        # section 1.1 on lost document boundaries in the legacy Multi-News artifact).
+        example_metadata = example.get("metadata")
+        n_source_documents = (
+            example_metadata.get("n_source_documents")
+            if isinstance(example_metadata, Mapping)
+            else None
+        )
+        if n_source_documents != 1:
+            raise SchemaValidationError(
+                "multi_document examples with exactly one document must record "
+                "metadata.n_source_documents == 1 to confirm this is a genuine "
+                "single-source cluster and not a document-flattening bug"
+            )
 
     document_ids = set()
     section_ids = set()
