@@ -133,8 +133,10 @@
 
 - [~] task-profile factory 已使單句只啟用 salience、強制一個句子並拒絕 subset NSGA-II；document-group coverage 尚未實作，若提前宣告會 fail loud
 - [~] canonical multi-sentence 已禁止 raw sum，僅允許 mean／length-normalized salience；shared evaluator 已固定 salience／full-source facility coverage／平均 pairwise redundancy 的方向與 aggregation，並把 `full source × candidates` coverage matrix 與 `candidates × candidates` redundancy matrix 分開；權重與跨文件尺度仍待 validation pilot
+- [~] @chi 07-27 | 上一項的禁令只涵蓋「有 `task_profile` 且 `output_mode=multi_sentence`」的路徑（`factory.py:87-92`）；沒有 `task_profile` 的 legacy_unprofiled 路徑（`factory.py:44-57`）預設仍是 `sum`，不受此禁令限制，屬潛在缺陷、尚未確認實際造成污染，詳見 `CODE_AUDIT_IEEE_Access.md` F-14
 - [x] `min_words / max_words / max_sentences / non-empty` 已由同一 feasibility contract 判斷；不可行解 fail loud，不作未記錄的空集合或長度 repair
-- [~] deterministic greedy、GRASP 與 NSGA-II 已使用完全相同 candidates、objectives 與 constraints，且保存 final evaluation；獨立 MMR baseline 尚待 Phase 2
+- [~] deterministic greedy、GRASP 與 NSGA-II 在**新 canonical pipeline** 已使用完全相同 candidates、objectives 與 constraints（注入同一 `SelectionObjective`），且保存 final evaluation；獨立 MMR baseline 尚待 Phase 2
+- [ ] @chi 07-27 | **legacy config 仍違反此條**：`2_Fusion_NoNsga2.yaml`（`fast_fused`→`greedy_select`）與 `2_Fusion_ExpA/B/C`（`fast_nsga2`→`nsga2_select`）走不同呼叫鏈，差異不只 optimizer，因此不是 matched ablation，證據見 F-15
 - [~] NSGA-II artifact 已保存完整可行 Pareto front 與 per-solution objectives；目前 weighted-sum Pareto policy 僅為 provisional，仍須在 validation 凍結 knee/reference-point policy
 - [~] 3-row correctness smoke 證實未設下限時 mean-salience 會退化成 1 句（41–88 words）；MVP 因此暫設 200–250 words 作 length-matched validation band，數值尚未 freeze，且不得依 test 調整
 - [x] full-source coverage smoke 的 coverage universe 為 80／227／92 句（非 candidate pool 的 55／60／60）；三筆輸出為 246／240／248 words、全部 feasible，union/guard 越界與 RRF mismatch 皆為 0
