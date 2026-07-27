@@ -28,6 +28,7 @@ from src.pipeline.feature_builder import build_base_scores
 from src.pipeline.candidate_builder import build_candidate_pool
 from src.pipeline.optimizer_dispatch import dispatch_optimizer
 from src.objectives.factory import build_objective_spec, validate_selector_for_task
+from src.objectives.evaluator import objective_from_spec
 
 
 # ------------------------------------------------------------------ #
@@ -112,6 +113,14 @@ def summarize_one(doc: Dict, cfg: Dict) -> Dict:
     selector_budget = max_words if unit == "words" else max_tokens
     max_sents_limit = lc.get("max_sentences", None)
     max_sents = int(max_sents_limit) if (max_sents_limit is not None) else None
+    min_words = int(lc.get("min_words", 0))
+    require_nonempty = bool(lc.get("require_nonempty", True))
+    if min_words < 0:
+        raise ValueError("length_control.min_words cannot be negative")
+    if unit in {"words", "tokens"} and min_words > selector_budget:
+        raise ValueError(
+            "length_control.min_words cannot exceed the active maximum length"
+        )
     alpha = float(cfg.get("redundancy", {}).get("lambda", 0.7))
     objective_spec = build_objective_spec(doc.get("task_profile"), cfg)
     method_opt = cfg.get("optimizer", {}).get("method", "greedy").lower()
@@ -203,6 +212,7 @@ def summarize_one(doc: Dict, cfg: Dict) -> Dict:
                 candidate_records, base_scores, salience_source
             )
             sub_sim = sim[np.ix_(cand_idx, cand_idx)] if sim is not None else None
+            sub_coverage = sim[:, cand_idx] if sim is not None else None
         else:
             if salience_source.lower() not in {"base_score", "membership_only"}:
                 raise ValueError(
@@ -213,13 +223,16 @@ def summarize_one(doc: Dict, cfg: Dict) -> Dict:
             for i in cand_idx:
                 sub_scores[i] = float(sub_scores[i]) * soft_boost
             sub_sim = sim
+            sub_coverage = sim
     else:
         sub_sentences = sentences
         sub_scores = base_scores
         sub_sim = sim
+        sub_coverage = sim
 
     # 6. Optimizer dispatch. A word budget no longer bypasses the configured
     # selector; it is simply the selector's independent output constraint.
+    optimizer_diagnostics: Dict = {}
     picked_sub = dispatch_optimizer(
         method_opt,
         sub_sentences,
@@ -231,7 +244,27 @@ def summarize_one(doc: Dict, cfg: Dict) -> Dict:
         unit,
         max_sents,
         objective_spec,
+        min_words,
+        require_nonempty,
+        optimizer_diagnostics,
+        sub_coverage,
     )
+
+    selection_evaluation = None
+    if sub_sentences:
+        evaluator = objective_from_spec(
+            sub_sentences,
+            sub_scores,
+            sub_sim,
+            objective_spec,
+            max_length=selector_budget,
+            length_unit=unit,
+            max_sentences=max_sents,
+            min_words=min_words,
+            require_nonempty=require_nonempty,
+            coverage_matrix=sub_coverage,
+        )
+        selection_evaluation = evaluator.assert_feasible(picked_sub).to_dict()
 
     # 7. Map back to original indices
     if use_cand and cand_idx and mode == "hard":
@@ -240,6 +273,20 @@ def summarize_one(doc: Dict, cfg: Dict) -> Dict:
         selected = sorted(picked_sub)
 
     selected.sort()
+    if selection_evaluation is not None:
+        selection_evaluation["candidate_relative_indices"] = list(
+            selection_evaluation["selected_indices"]
+        )
+        selection_evaluation["selected_indices"] = list(selected)
+    if optimizer_diagnostics.get("pareto_front"):
+        for solution in optimizer_diagnostics["pareto_front"]:
+            relative = list(solution["selected_indices"])
+            solution["candidate_relative_indices"] = relative
+            solution["selected_indices"] = (
+                sorted(cand_idx[index] for index in relative)
+                if use_cand and cand_idx and mode == "hard"
+                else relative
+            )
     summary_sentences = [sentences[i] for i in selected]
     summary = "\n".join(summary_sentences)
     candidate_by_index = {
@@ -290,11 +337,15 @@ def summarize_one(doc: Dict, cfg: Dict) -> Dict:
             "allocation": candidate_pool_result["allocation"],
         },
         "objective_spec": objective_spec,
+        "selection_evaluation": selection_evaluation,
+        "optimizer_diagnostics": optimizer_diagnostics or None,
         "output_budget": {
             "unit": unit,
             "max_words": max_words if unit == "words" else None,
             "max_tokens": max_tokens if unit == "tokens" else None,
             "max_sentences": max_sents,
+            "min_words": min_words,
+            "require_nonempty": require_nonempty,
         },
         "task_profile": doc.get("task_profile"),
     }

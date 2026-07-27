@@ -52,6 +52,13 @@ def build_objective_spec(
             "importance_aggregation": str(
                 objective_cfg.get("importance_aggregation", "sum")
             ),
+            "coverage_method": str(objective_cfg.get("coverage_method", "max")),
+            "coverage_scope": "legacy_candidate_or_source_unprofiled",
+            "weights": {
+                "salience": float(objective_cfg.get("lambda_importance", 1.0)),
+                "facility_coverage": float(objective_cfg.get("lambda_coverage", 0.8)),
+                "redundancy": float(objective_cfg.get("lambda_redundancy", 0.7)),
+            },
             "required_max_sentences": None,
             "group_coverage": False,
         }
@@ -80,6 +87,13 @@ def build_objective_spec(
             "applicable": ["salience"],
             "active": ["salience"],
             "importance_aggregation": "single_item",
+            "coverage_method": "max",
+            "coverage_scope": "not_applicable",
+            "weights": {
+                "salience": 1.0,
+                "facility_coverage": 0.0,
+                "redundancy": 0.0,
+            },
             "required_max_sentences": 1,
             "group_coverage": False,
         }
@@ -93,13 +107,14 @@ def build_objective_spec(
     coverage_method = str(objective_cfg.get("coverage_method", "max")).lower()
     if coverage_method not in {"max", "set", "diversity"}:
         raise ValueError(f"unknown coverage method: {coverage_method!r}")
+    if coverage_method == "diversity":
+        raise ValueError(
+            "profiled coverage_method='diversity' mixes redundancy into the "
+            "coverage objective and double-counts it; use facility coverage "
+            "('max' or its equivalent 'set')"
+        )
     applicable = ["salience", "facility_coverage", "redundancy"]
-    selector = str((cfg.get("optimizer", {}) or {}).get("method", "greedy")).lower()
-    active = (
-        applicable
-        if selector in {"nsga2", "fast_nsga2"}
-        else ["salience", "redundancy"]
-    )
+    active = applicable
     return {
         "status": "task_profiled_v1",
         "input_mode": input_mode,
@@ -108,6 +123,12 @@ def build_objective_spec(
         "active": active,
         "importance_aggregation": aggregation,
         "coverage_method": coverage_method,
+        "coverage_scope": "full_source_sentences",
+        "weights": {
+            "salience": float(objective_cfg.get("lambda_importance", 1.0)),
+            "facility_coverage": float(objective_cfg.get("lambda_coverage", 0.8)),
+            "redundancy": float(objective_cfg.get("lambda_redundancy", 0.7)),
+        },
         "required_max_sentences": None,
         "group_coverage": False,
     }

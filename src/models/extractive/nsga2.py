@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import Dict, List, Optional
 import numpy as np
 from pymoo.algorithms.moo.nsga2 import NSGA2
 from pymoo.operators.sampling.rnd import BinaryRandomSampling
@@ -7,49 +7,11 @@ from pymoo.operators.mutation.bitflip import BitflipMutation
 from pymoo.optimize import minimize
 from pymoo.core.problem import ElementwiseProblem
 
-from src.utils.tokenizer import count_tokens
-from src.objectives.factory import aggregate_importance
-
-
-# --------------- coverage helpers ---------------
-
-def _coverage_max(sim_mat: np.ndarray, idx: np.ndarray) -> float:
-    """Original: mean of max similarity to any selected sentence."""
-    sub = sim_mat[:, idx]
-    return float(np.mean(np.max(sub, axis=1)))
-
-
-def _coverage_set(sim_mat: np.ndarray, idx: np.ndarray) -> float:
-    """Set-coverage: marginal contribution (greedy submodular)."""
-    n = sim_mat.shape[0]
-    covered = np.zeros(n)
-    for i in idx:
-        covered = np.maximum(covered, sim_mat[:, i])
-    return float(covered.mean())
-
-
-def _coverage_diversity(sim_mat: np.ndarray, idx: np.ndarray) -> float:
-    """Coverage minus internal redundancy penalty."""
-    cov = _coverage_max(sim_mat, idx)
-    if idx.size > 1:
-        S = sim_mat[np.ix_(idx, idx)]
-        red = float(np.mean(S[np.triu_indices(len(idx), k=1)]))
-    else:
-        red = 0.0
-    return cov - 0.3 * red
-
-
-_COVERAGE_FNS = {
-    "max": _coverage_max,
-    "set": _coverage_set,
-    "diversity": _coverage_diversity,
-}
-
-
-def _compute_coverage(sim_mat: np.ndarray, idx: np.ndarray, method: str = "max") -> float:
-    if method not in _COVERAGE_FNS:
-        raise ValueError(f"unknown coverage method: {method!r}")
-    return _COVERAGE_FNS[method](sim_mat, idx)
+from src.objectives.evaluator import (
+    ObjectiveWeights,
+    SelectionConstraints,
+    SelectionObjective,
+)
 
 
 # --------------- problem definition ---------------
@@ -57,47 +19,21 @@ def _compute_coverage(sim_mat: np.ndarray, idx: np.ndarray, method: str = "max")
 class SummarizationProblem(ElementwiseProblem):
     def __init__(
         self,
-        sentences: List[str],
-        importance: List[float],
-        sim_mat: np.ndarray,
-        max_tokens: int,
-        unit: str = "tokens",
-        max_sentences: Optional[int] = None,
-        coverage_method: str = "max",
-        importance_aggregation: str = "sum",
+        evaluator: SelectionObjective,
     ):
-        self.sentences = sentences
-        self.importance = np.array(importance)
-        self.sim_mat = sim_mat
-        self.max_tokens = max_tokens
-        self.unit = (unit or "tokens").lower()
-        self.max_sentences = max_sentences if (max_sentences is not None) else 10**9
-        self.coverage_method = coverage_method
-        self.importance_aggregation = importance_aggregation
-        n = len(sentences)
-        super().__init__(n_var=n, n_obj=3, n_constr=1, xl=0, xu=1, type_var=int)
+        self.evaluator = evaluator
+        n = len(evaluator.sentences)
+        super().__init__(n_var=n, n_obj=3, n_constr=4, xl=0, xu=1, type_var=int)
 
     def _evaluate(self, x, out, *args, **kwargs):
         idx = np.where(x > 0)[0]
-        imp = aggregate_importance(
-            self.importance, idx, self.sentences, self.importance_aggregation
-        )
-
-        cov = _compute_coverage(self.sim_mat, idx, self.coverage_method) if idx.size > 0 else 0.0
-
-        if idx.size > 1:
-            S = self.sim_mat[np.ix_(idx, idx)]
-            red = np.mean(S[np.triu_indices(len(idx), k=1)])
-        else:
-            red = 0.0
-
-        out["F"] = [-imp, -cov, red]
-        if self.unit == "sentences":
-            total_sents = len(idx)
-            out["G"] = [total_sents - int(self.max_sentences)]
-        else:
-            total_tokens = sum(count_tokens(self.sentences[i]) for i in idx)
-            out["G"] = [total_tokens - self.max_tokens]
+        evaluation = self.evaluator.evaluate(idx)
+        out["F"] = [
+            -evaluation.salience,
+            -evaluation.facility_coverage,
+            evaluation.redundancy,
+        ]
+        out["G"] = self.evaluator.inequality_constraints(idx)
 
 
 # --------------- public API ---------------
@@ -117,17 +53,38 @@ def nsga2_select(
     seed: Optional[int] = None,
     coverage_method: str = "max",
     importance_aggregation: str = "sum",
+    min_words: int = 0,
+    require_nonempty: bool = True,
+    evaluator: SelectionObjective | None = None,
+    diagnostics: Optional[Dict] = None,
 ) -> List[int]:
     n = len(sentences)
     if n == 0:
         return []
+    if pop_size < 2 or n_gen < 1:
+        raise ValueError("NSGA-II requires pop_size >= 2 and n_gen >= 1")
 
-    problem = SummarizationProblem(
-        sentences, importance, sim_mat, max_tokens,
-        unit=unit, max_sentences=max_sentences,
-        coverage_method=coverage_method,
-        importance_aggregation=importance_aggregation,
-    )
+    if evaluator is None:
+        evaluator = SelectionObjective(
+            sentences,
+            importance,
+            sim_mat,
+            importance_aggregation=importance_aggregation,
+            coverage_method=coverage_method,
+            weights=ObjectiveWeights(
+                salience=lambda_importance,
+                facility_coverage=lambda_coverage,
+                redundancy=lambda_redundancy,
+            ),
+            constraints=SelectionConstraints(
+                length_unit=unit,
+                max_length=max_tokens,
+                min_words=min_words,
+                max_sentences=max_sentences,
+                require_nonempty=require_nonempty,
+            ),
+        )
+    problem = SummarizationProblem(evaluator)
 
     algorithm = NSGA2(
         pop_size=pop_size,
@@ -145,32 +102,61 @@ def nsga2_select(
         verbose=False,
     )
     if res.X is None:
-        return []
+        raise ValueError("NSGA-II returned no feasible Pareto solution")
 
     X = np.atleast_2d(res.X)
     best_val = -1e18
     best_idx = -1
+    best_front_idx = -1
+    pareto_front = []
 
     for i, x in enumerate(X):
         idx = np.where(x > 0)[0]
-        imp = aggregate_importance(
-            np.asarray(importance), idx, sentences, importance_aggregation
-        )
-        cov = _compute_coverage(sim_mat, idx, coverage_method) if idx.size > 0 else 0.0
-        red = np.mean(sim_mat[np.ix_(idx, idx)][np.triu_indices(len(idx), k=1)]) if idx.size > 1 else 0.0
-
-        val = lambda_importance * imp + lambda_coverage * cov - lambda_redundancy * red
-        if val > best_val:
+        evaluation = evaluator.evaluate(idx)
+        if not evaluation.feasible:
+            continue
+        val = evaluation.scalar_utility
+        pareto_front.append(evaluation.to_dict())
+        if val > best_val + 1e-12 or (
+            abs(val - best_val) <= 1e-12
+            and (best_idx < 0 or tuple(idx.tolist()) < tuple(np.where(X[best_idx] > 0)[0].tolist()))
+        ):
             best_val = val
             best_idx = i
+            best_front_idx = len(pareto_front) - 1
 
     if best_idx >= 0:
         chosen = X[best_idx]
         sel = np.where(chosen > 0)[0].tolist()
         sel.sort()
+        evaluator.assert_feasible(sel)
+        if diagnostics is not None:
+            diagnostics.update(
+                {
+                    "method": "nsga2",
+                    "pareto_policy": "weighted_sum_on_shared_objectives",
+                    "pareto_front": pareto_front,
+                    "pareto_size": len(pareto_front),
+                    "selected_pareto_row": best_front_idx,
+                    "search": {
+                        "population_size": int(pop_size),
+                        "generations": int(n_gen),
+                        "seed": seed,
+                        "sampling": "BinaryRandomSampling",
+                        "crossover": "TwoPointCrossover",
+                        "mutation": "BitflipMutation",
+                        "eliminate_duplicates": True,
+                    },
+                    "selection_weights": {
+                        "salience": evaluator.weights.salience,
+                        "facility_coverage": evaluator.weights.facility_coverage,
+                        "redundancy": evaluator.weights.redundancy,
+                    },
+                }
+            )
         return sel
     else:
-        return []
+        raise ValueError("NSGA-II returned no feasible summary")
 
 
 if __name__ == "__main__":

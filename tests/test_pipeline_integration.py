@@ -74,6 +74,24 @@ class TestPipelineWithV2Features:
         }
         result = summarize_one(sample_doc, base_config)
         assert len(result["selected_indices"]) > 0
+
+
+class TestPipelineNsga2:
+    def test_pareto_front_is_preserved_in_artifact(self, sample_doc, base_config):
+        pytest.importorskip("pymoo")
+        base_config["optimizer"] = {"method": "nsga2", "pop_size": 12, "n_gen": 6}
+        base_config["seed"] = 2024
+        result = summarize_one(sample_doc, base_config)
+
+        diagnostics = result["optimizer_diagnostics"]
+        assert diagnostics["method"] == "nsga2"
+        assert diagnostics["pareto_size"] == len(diagnostics["pareto_front"])
+        assert diagnostics["pareto_size"] > 0
+        selected_solution = diagnostics["pareto_front"][
+            diagnostics["selected_pareto_row"]
+        ]
+        assert selected_solution["selected_indices"] == result["selected_indices"]
+        assert selected_solution["feasible"] is True
     def test_v2_position(self, sample_doc, base_config):
         base_config["features"] = {
             "position": {"version": "v2", "method": "inverse"},
@@ -159,6 +177,7 @@ class TestCandidateBudgetContract:
 
         def fake_dispatch(*args, **kwargs):
             captured["scores"] = list(args[2])
+            captured["coverage_shape"] = args[-1].shape
             return [0]
 
         monkeypatch.setattr(
@@ -196,6 +215,7 @@ class TestCandidateBudgetContract:
         ]
         assert captured["scores"] == pytest.approx(expected)
         assert captured["scores"] != pytest.approx(lexical)
+        assert captured["coverage_shape"] == (len(sample_doc["sentences"]), 4)
         assert all(
             candidate["selector_salience_source"] == "rrf_fusion"
             for candidate in result["candidate_records"]
@@ -283,6 +303,32 @@ class TestPipelineEdgeCases:
         )
         result = summarize_one(doc, base_config)
         assert result["objective_spec"]["importance_aggregation"] == "mean"
+        assert result["objective_spec"]["active"] == [
+            "salience",
+            "facility_coverage",
+            "redundancy",
+        ]
+        assert result["selection_evaluation"]["feasible"] is True
+        assert result["selection_evaluation"]["selected_indices"] == [0]
+        assert result["selection_evaluation"]["coverage_universe_size"] == 2
+        assert result["objective_spec"]["coverage_scope"] == "full_source_sentences"
+
+    def test_impossible_minimum_length_fails_loudly(self, base_config):
+        doc = build_document_example(
+            example_id="impossible-min",
+            split="validation",
+            documents=[["Only two words."]],
+            references=["Reference."],
+            input_mode="single_document",
+            output_mode="multi_sentence",
+        )
+        base_config["length_control"] = {
+            "unit": "words",
+            "max_words": 10,
+            "min_words": 5,
+        }
+        with pytest.raises(ValueError, match="infeasible summary"):
+            summarize_one(doc, base_config)
 
     def test_profiled_multi_sentence_rejects_sum_importance(self, base_config):
         doc = build_document_example(

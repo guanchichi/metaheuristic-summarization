@@ -6,6 +6,7 @@ import numpy as np
 
 from src.models.extractive.greedy import greedy_select
 from src.models.extractive.grasp import grasp_select
+from src.objectives.evaluator import objective_from_spec
 
 try:
     from src.models.extractive.encoder_rank import encoder_select  # type: ignore
@@ -45,15 +46,44 @@ def dispatch_optimizer(
     unit: str,
     max_sents: Optional[int],
     objective_spec: Optional[Dict] = None,
+    min_words: int = 0,
+    require_nonempty: bool = True,
+    diagnostics: Optional[Dict] = None,
+    coverage_matrix: Optional[np.ndarray] = None,
 ) -> List[int]:
     """Run the selected optimizer and return picked indices (relative to sub_sentences)."""
 
     method = method.lower()
 
+    if not sub_sentences:
+        return []
+
+    if method == "nsga2" and sub_sim is None:
+        raise ValueError(
+            "NSGA-II requires a similarity matrix; refusing to fall back "
+            "to greedy because that would change the declared method."
+        )
+
+    shared_evaluator = None
+    if method in {"greedy", "grasp", "nsga2"}:
+        shared_evaluator = objective_from_spec(
+            sub_sentences,
+            sub_scores,
+            sub_sim,
+            objective_spec,
+            max_length=max_tokens,
+            length_unit=unit,
+            max_sentences=max_sents,
+            min_words=min_words,
+            require_nonempty=require_nonempty,
+            coverage_matrix=coverage_matrix,
+        )
+
     if method == "greedy":
         return greedy_select(
             sub_sentences, sub_scores, sub_sim, max_tokens,
             alpha=alpha, unit=unit, max_sentences=max_sents,
+            evaluator=shared_evaluator,
         )
 
     if method == "grasp":
@@ -65,14 +95,10 @@ def dispatch_optimizer(
             seed=cfg.get("seed"),
             unit=unit,
             max_sentences=max_sents,
+            evaluator=shared_evaluator,
         )
 
     if method == "nsga2":
-        if sub_sim is None:
-            raise ValueError(
-                "NSGA-II requires a similarity matrix; refusing to fall back "
-                "to greedy because that would change the declared method."
-            )
         obj = cfg.get("objectives", {})
         ocfg = cfg.get("optimizer", {})
         # AUDIT FIX (2026-07): pop_size / n_gen / seed were declared in the
@@ -96,6 +122,10 @@ def dispatch_optimizer(
             importance_aggregation=str(
                 (objective_spec or {}).get("importance_aggregation", "sum")
             ),
+            min_words=min_words,
+            require_nonempty=require_nonempty,
+            evaluator=shared_evaluator,
+            diagnostics=diagnostics,
         )
 
     if method in ("bert", "roberta", "xlnet"):

@@ -38,6 +38,9 @@ def test_nsga2_forwards_effective_parameters(monkeypatch):
     assert captured["pop_size"] == 17
     assert captured["n_gen"] == 23
     assert captured["seed"] == 41
+    assert captured["evaluator"].weights.salience == pytest.approx(1.0)
+    assert captured["evaluator"].weights.facility_coverage == pytest.approx(0.8)
+    assert captured["evaluator"].weights.redundancy == pytest.approx(0.7)
 
 
 def test_nsga2_without_similarity_fails_loudly():
@@ -48,3 +51,12 @@ def test_nsga2_without_similarity_fails_loudly():
 def test_unknown_method_fails_loudly():
     with pytest.raises(ValueError, match="Unknown optimizer method"):
         _call("typo-that-must-not-run-greedy")
+
+
+def test_missing_nsga_dependency_is_not_silently_replaced(monkeypatch):
+    def missing_dependency(*args, **kwargs):
+        raise ImportError("pymoo is absent")
+
+    monkeypatch.setattr(dispatch, "nsga2_select", missing_dependency)
+    with pytest.raises(ImportError, match="pymoo is absent"):
+        _call("nsga2", sim=np.eye(2))

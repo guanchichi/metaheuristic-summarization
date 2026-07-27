@@ -44,9 +44,18 @@ selector:
   # Use provenance fusion inside the pool, not only for pool membership.
   salience_source: rrf_fusion
 
+objectives:
+  # Provisional validation weights. These are shared by deterministic greedy,
+  # GRASP, and NSGA-II and must be frozen on validation before a test run.
+  importance_aggregation: mean
+  coverage_method: max
+  lambda_importance: 1.0
+  lambda_coverage: 0.8
+  lambda_redundancy: 0.7
+
 routes:
   lexical:
-    revision: tf_isf_v2:sublinear_unigram
+    revision: tf_isf_v2:smooth_nonnegative_sublinear_unigram
   semantic:
     model_name: sentence-transformers/all-MiniLM-L6-v2
     revision: c9745ed1d9f207416be6d2e6f8de32d1f16199bf
@@ -65,6 +74,10 @@ optimizer:
 length_control:
   unit: words
   max_words: 250
+  # Provisional validation band to prevent mean-salience from collapsing to a
+  # one-sentence summary. Freeze or revise this on validation, never on test.
+  min_words: 200
+  require_nonempty: true
 
 redundancy:
   lambda: 0.7

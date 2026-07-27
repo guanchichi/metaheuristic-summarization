@@ -31,3 +31,11 @@ def test_group_coverage_cannot_be_claimed_before_implementation():
             {"input_mode": "multi_document", "output_mode": "multi_sentence"},
             {"objectives": {"group_coverage": True}},
         )
+
+
+def test_profiled_coverage_cannot_embed_redundancy_twice():
+    with pytest.raises(ValueError, match="double-counts"):
+        build_objective_spec(
+            {"input_mode": "single_document", "output_mode": "multi_sentence"},
+            {"objectives": {"coverage_method": "diversity"}},
+        )
