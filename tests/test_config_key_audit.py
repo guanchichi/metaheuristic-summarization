@@ -23,9 +23,24 @@ def test_phase1_greedy_objectives_are_not_falsely_reported_dead():
         "objectives.importance_aggregation",
         "experiment.status",
         "experiment.dataset",
+        "data_policy.policy_path",
+        "data_policy.policy_sha256",
+        "data_policy.analysis",
         "seed",
     } & unread
     assert report["declared_unread"] == []
+
+
+def test_unknown_data_policy_key_is_reported(monkeypatch):
+    rendered = yaml.safe_dump(
+        {
+            "optimizer": {"method": "greedy"},
+            "data_policy": {"policy_paht": "typo.json"},
+        }
+    )
+    monkeypatch.setattr("builtins.open", lambda *args, **kwargs: StringIO(rendered))
+    report = audit_config("bad-data-policy.yaml")
+    assert report["declared_unread"][0]["key"] == "data_policy.policy_paht"
 
 
 def test_canonical_greedy_flags_superseded_legacy_alpha(monkeypatch):

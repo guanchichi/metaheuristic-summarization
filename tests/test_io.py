@@ -1,12 +1,34 @@
 """Tests for reproducibility-related I/O helpers."""
 
 import builtins
+from io import StringIO
 import random
 
 import numpy as np
 import pytest
 
-from src.utils.io import set_global_seed
+from src.utils.io import set_global_seed, write_jsonl
+
+
+def test_jsonl_writer_pins_lf_newlines(monkeypatch):
+    captured = {}
+
+    class NonClosingBuffer(StringIO):
+        def __exit__(self, *_args):
+            return False
+
+    buffer = NonClosingBuffer()
+
+    def fake_open(_path, _mode, **kwargs):
+        captured.update(kwargs)
+        return buffer
+
+    monkeypatch.setattr("src.utils.io.ensure_dir", lambda _path: None)
+    monkeypatch.setattr("builtins.open", fake_open)
+    write_jsonl("artifact.jsonl", [{"id": "row"}])
+
+    assert captured["newline"] == "\n"
+    assert buffer.getvalue() == '{"id": "row"}\n'
 
 
 def test_global_seed_repeats_python_and_numpy_sequences():

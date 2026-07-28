@@ -32,6 +32,10 @@ def validate_jsonl(
     expected_split: Optional[str] = None,
     expected_rows: Optional[int] = None,
     expected_dataset_revision: Optional[str] = None,
+    expected_dataset_name: Optional[str] = None,
+    expected_dataset_fingerprint: Optional[str] = None,
+    expected_replacement_rows: Optional[int] = None,
+    expected_replacement_characters: Optional[int] = None,
     allow_debug_subset: bool = False,
     allow_replacement_character: bool = False,
 ) -> Dict[str, Any]:
@@ -50,6 +54,7 @@ def validate_jsonl(
     sentence_counts: Counter = Counter()
     sentence_word_counts: Counter = Counter()
     split_counts: Counter = Counter()
+    dataset_names: Counter = Counter()
     dataset_revisions: Counter = Counter()
     total_sentence_words = 0
     replacement_characters = 0
@@ -134,6 +139,8 @@ def validate_jsonl(
         document_counts[len(row["documents"])] += 1
         reference_counts[len(row["references"])] += 1
         split_counts[row["split"]] += 1
+        if row.get("dataset_name"):
+            dataset_names[str(row["dataset_name"])] += 1
         if metadata.get("dataset_revision"):
             dataset_revisions[str(metadata["dataset_revision"])] += 1
         row_sentence_count = 0
@@ -158,10 +165,68 @@ def validate_jsonl(
         report["errors"].append(
             {"line": None, "error": "dataset mixes multiple source revisions"}
         )
+    if expected_dataset_name is not None:
+        unexpected_names = {
+            name: count
+            for name, count in dataset_names.items()
+            if name != expected_dataset_name
+        }
+        if unexpected_names or sum(dataset_names.values()) != structurally_valid_rows:
+            report["errors"].append(
+                {
+                    "line": None,
+                    "error": (
+                        f"dataset names are {dict(sorted(dataset_names.items()))!r}, "
+                        f"expected every row to be {expected_dataset_name!r}"
+                    ),
+                }
+            )
+    actual_fingerprint = dataset_digest.hexdigest()
+    if (
+        expected_dataset_fingerprint is not None
+        and actual_fingerprint != expected_dataset_fingerprint
+    ):
+        report["errors"].append(
+            {
+                "line": None,
+                "error": (
+                    f"dataset fingerprint is {actual_fingerprint}, expected "
+                    f"{expected_dataset_fingerprint}"
+                ),
+            }
+        )
+    if (
+        expected_replacement_rows is not None
+        and replacement_character_rows != expected_replacement_rows
+    ):
+        report["errors"].append(
+            {
+                "line": None,
+                "error": (
+                    f"Unicode replacement row count is {replacement_character_rows}, "
+                    f"expected {expected_replacement_rows}"
+                ),
+            }
+        )
+    if (
+        expected_replacement_characters is not None
+        and replacement_characters != expected_replacement_characters
+    ):
+        report["errors"].append(
+            {
+                "line": None,
+                "error": (
+                    "Unicode replacement character count is "
+                    f"{replacement_characters}, expected "
+                    f"{expected_replacement_characters}"
+                ),
+            }
+        )
     report["valid"] = not report["errors"] and report["rows"] > 0
-    report["dataset_fingerprint"] = dataset_digest.hexdigest()
+    report["dataset_fingerprint"] = actual_fingerprint
     report["health"] = {
         "split_counts": dict(sorted(split_counts.items())),
+        "dataset_names": dict(sorted(dataset_names.items())),
         "dataset_revisions": dict(sorted(dataset_revisions.items())),
         "structurally_valid_rows": structurally_valid_rows,
         "documents_per_example": dict(sorted(document_counts.items())),
@@ -214,6 +279,10 @@ def main() -> None:
     parser.add_argument("--split", default=None, help="expected train/validation/test split")
     parser.add_argument("--expected_rows", type=int, default=None)
     parser.add_argument("--expected_dataset_revision", default=None)
+    parser.add_argument("--expected_dataset_name", default=None)
+    parser.add_argument("--expected_dataset_fingerprint", default=None)
+    parser.add_argument("--expected_replacement_rows", type=int, default=None)
+    parser.add_argument("--expected_replacement_characters", type=int, default=None)
     parser.add_argument("--allow_debug_subset", action="store_true")
     parser.add_argument("--allow_replacement_character", action="store_true")
     parser.add_argument("--report_out", default=None, help="optional JSON report path")
@@ -224,6 +293,10 @@ def main() -> None:
         expected_split=args.split,
         expected_rows=args.expected_rows,
         expected_dataset_revision=args.expected_dataset_revision,
+        expected_dataset_name=args.expected_dataset_name,
+        expected_dataset_fingerprint=args.expected_dataset_fingerprint,
+        expected_replacement_rows=args.expected_replacement_rows,
+        expected_replacement_characters=args.expected_replacement_characters,
         allow_debug_subset=args.allow_debug_subset,
         allow_replacement_character=args.allow_replacement_character,
     )

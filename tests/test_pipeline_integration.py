@@ -468,6 +468,48 @@ class TestPipelineEdgeCases:
         assert captured["path"] == "predictions.jsonl"
         assert len(captured["rows"]) == 1
 
+    def test_governed_jsonl_runner_requires_dataset_preflight(
+        self, sample_doc, base_config, monkeypatch
+    ):
+        captured = {}
+        governed = dict(base_config)
+        governed["experiment"] = {
+            "status": "validation_pilot_only",
+            "dataset": "fixture",
+        }
+        governed["data_policy"] = {
+            "policy_path": "policy.json",
+            "policy_sha256": "0" * 64,
+            "analysis": "main",
+        }
+        sample_doc = dict(sample_doc, split="validation")
+        monkeypatch.setattr(
+            "src.pipeline.select_sentences.read_jsonl",
+            lambda _path: iter([sample_doc]),
+        )
+
+        def capture_preflight(cfg, input_path, split):
+            captured["preflight"] = (cfg, input_path, split)
+            return {"valid": True}
+
+        monkeypatch.setattr(
+            "src.pipeline.select_sentences.validate_dataset_policy_request",
+            capture_preflight,
+        )
+        monkeypatch.setattr(
+            "src.pipeline.select_sentences.write_jsonl_atomic",
+            lambda _path, rows: list(rows),
+        )
+        monkeypatch.setattr(
+            "src.pipeline.select_sentences.validate_experiment_document",
+            lambda _cfg, _doc: None,
+        )
+
+        assert summarize_jsonl(
+            "input.jsonl", "predictions.jsonl", governed, "validation"
+        ) == 1
+        assert captured["preflight"][1:] == ("input.jsonl", "validation")
+
     def test_jsonl_runner_rejects_empty_input(self, base_config, monkeypatch):
         monkeypatch.setattr(
             "src.pipeline.select_sentences.read_jsonl", lambda _path: iter(())

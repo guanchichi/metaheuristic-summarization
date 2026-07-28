@@ -85,6 +85,7 @@ python -m src.pipeline.select_sentences \
 | 鍵 | 說明 |
 |---|---|
 | `experiment.status / dataset` | `validation_pilot_only` 只允許 canonical validation rows，且 dataset identity 必須一致；目前其他 status 一律 fail closed |
+| `data_policy.policy_path / policy_sha256 / analysis` | 指向並鎖定 versioned frozen policy，再選擇 `main` 或 `clean_sensitivity`；runner 會在建立 run 前核對 policy SHA、row count、revision、content fingerprint、file/manifest SHA 與 U+FFFD 數量 |
 | `objectives.lambda_*` | 從 Pareto front 選解時的加權（importance / coverage / redundancy） |
 | `objectives.coverage_method` | `max`（預設）/ `set` / `diversity` |
 | `features.weights.*` | 各特徵在 base score 的權重 |

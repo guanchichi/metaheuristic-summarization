@@ -17,7 +17,7 @@ The key -> source map below (``METHOD_KEY_MAP``) was hand-transcribed from
 branch-only map becomes stale whenever shared pipeline wiring changes.
 
 It covers selection/governance sections used by the formal entry point:
-``experiment.*``, ``objectives.*``, ``optimizer.{pop_size,n_gen}``, top-level
+``experiment.*``, ``data_policy.*``, ``objectives.*``, ``optimizer.{pop_size,n_gen}``, top-level
 ``seed``, ``bert.*``, ``fusion.*``, ``redundancy.lambda``, ``grasp.*``.
 Everything else in a config (``graph_params``, ``features``,
 ``representations``, ``candidates``, ``candidate_budget``, ``routes``,
@@ -233,6 +233,7 @@ KNOWN_INAPPLICABLE: Dict[str, List[Tuple[str, str]]] = {
 # about yet.
 SCOPED_SECTIONS: Dict[str, set] = {
     "experiment": {"status", "dataset"},
+    "data_policy": {"policy_path", "policy_sha256", "analysis"},
     "objectives": {
         "lambda_importance",
         "lambda_coverage",
@@ -258,6 +259,9 @@ TOP_LEVEL_SCALAR_KEYS = {"seed"}
 ALWAYS_CONSUMED_IF_DECLARED = {
     "experiment.status",
     "experiment.dataset",
+    "data_policy.policy_path",
+    "data_policy.policy_sha256",
+    "data_policy.analysis",
 }
 
 # Keys under a scoped section that are known and fine to declare but are

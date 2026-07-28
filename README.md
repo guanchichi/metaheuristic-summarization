@@ -121,9 +121,20 @@ python -m src.data.validate_dataset \
 
 Pinned validation 原始 5,622 列中有 1 列是空來源，故 canonical 輸出固定為
 5,621 列並另寫 exclusion manifest。strict validator 會因其中 72 列含 U+FFFD
-而失敗；這是尚待凍結的資料政策 gate，不得為了開跑而直接加
-`--allow_replacement_character`。完整可重現統計見
+而失敗；正式政策已凍結為「主分析保留 5,621 列且不修字，另報排除固定
+72 列的 5,549-row clean sensitivity」。不得任意加
+`--allow_replacement_character` 或看完分數再換 subset。另有 72 列全文不足 `min_words=200` —— 那是**不同的 72 列**，與 U+FFFD 批次交集為 0、聯集 144 列，兩者機制獨立。完整契約與統計見
+`configs/data_policies/multinews_validation_v1.json`、
 `docs/research/evidence/multinews_validation_health_summary.json`。
+
+clone 後依 tracked policy/manifest 生成並驗證 ignored clean sensitivity：
+
+```bash
+python -m src.data.freeze_multinews_policy
+```
+
+預設命令不會改寫 tracked policy 或 72-row manifest；
+`--initialize_policy` 只供「尚未看任何結果的新 policy version」使用。
 
 Phase 1 的 requested `min_words=200` 會逐列依句子不可切割及 250-word
 上限計算 exact source capacity；只有全文本身不可達時才產生較小的
@@ -140,6 +151,18 @@ python -m src.pipeline.select_sentences --config configs/phase1_mvp_multinews.ya
   --input data/processed/multi_news_validation_canonical.jsonl \
   --run_dir runs --stamp phase1-mvp-multinews-validation
 ```
+
+相同 frozen method 的 clean sensitivity run：
+
+```bash
+python -m src.pipeline.select_sentences --config configs/phase1_mvp_multinews.yaml \
+  --data_policy_analysis clean_sensitivity --split validation \
+  --input data/processed/multi_news_validation_clean_sensitivity.jsonl \
+  --run_dir runs --stamp phase1-mvp-multinews-validation-clean
+```
+
+兩種 run 都會在建立正式輸出前核對 policy、dataset、manifest 與 exclusion
+manifest 的 SHA-256，並將通過的身份寫入 `dataset_preflight.json`。
 
 評估（ROUGE-1/2/Lsum）：
 

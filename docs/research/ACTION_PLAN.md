@@ -95,7 +95,7 @@
 
 **1a 的共同驗收條件**（全部完成才能把上面的 `[~]` 改成 `[x]`）：
 
-- [x] `pip install pytest` 並讓 `tests/` 能跑（2026-07-27：189 passed）
+- [x] `pip install pytest` 並讓 `tests/` 能跑（2026-07-28：200 passed）
 - [ ] 每個 patch 都有對應的 regression test（見 1e）
 - [ ] **條件式**：若保留 SciTLDR stress test，official single-sentence oracle 須重現 R1 ≈ 52.4；若不保留，維持 evaluator fail-closed 即可，不阻塞 Phase 1
 
@@ -104,13 +104,13 @@
 - [x] 🔴 `preprocess_scitldr.py`：**停止串接 multi-reference**，`references` 存成 list（2026-07-26；含 canonical schema 與 golden test）
 - [~] canonical Multi-News 已改用 deterministic NLTK Punkt 並保存 char-span mapping；GovReport／CNN-DM 仍須各自驗證分句規則
       （legacy 正則分句曾造成 358/37349 個「句子」超過 80 字，最長 855 字，該 flat artifact 不得進正式實驗）
-- [x] Multi-News preprocessor 正確保留 `|||||` 分隔與換行 mapping；U+FFFD 預設 fail closed（2026-07-26，golden tests 已加）
+- [x] Multi-News preprocessor 正確保留 `|||||` 分隔與換行 mapping；U+FFFD 預設 fail closed。正式 `multinews-validation-v1` 政策已在看 validation 分數前凍結：主分析保留 5,621 列且禁止修字，另以固定 72-row manifest 產生 5,549-row clean sensitivity；runner 強制核對 policy、dataset 與 manifests 的 SHA/fingerprint
 - [~] 已實作從 pinned 作者資料重建 Multi-News，保存 boundary、source order、raw char span、hash 與 original-to-cleaned mapping；待實際產生三個完整 split 與 manifest，現有扁平 `sentences` 不得進正式實驗
 - [ ] 下載並驗證 GovReport 官方資料：split、row count、checksum、license、section metadata 與異常列規則
 - [x] `max_words / max_sentences / max_model_tokens / candidate_budget / compute_budget` 已拆成不同設定與 output artifact；`unit: words` 不再繞過 selector
 - [ ] 重建 **CNN/DM 官方 split**：train 287,113 / validation 13,368 / **test 11,490**
 - [~] 資料健檢器已實作：筆數、ID、split、文件／reference／每列句數分布、U+FFFD、debug subset、revision 與 checksum；完整 pinned Multi-News validation 已生成並保存摘要證據，其他 split／dataset 報告仍待完成
-      （validation：5,622 raw → 5,621 canonical，1 列空來源排除；72 列／1,042 個 U+FFFD 使 strict gate 失敗；58 個 singleton clusters；412 列少於 20 句；最大 3,347 句，單句最長 2,638 words。資料納入／排除政策尚未 freeze）
+      （validation：5,622 raw → 5,621 canonical，1 列空來源排除；72 列／1,042 個 U+FFFD 依 frozen policy 保留於 main 並排除於 paired clean sensitivity；58 個 singleton clusters；412 列少於 20 句；最大 3,347 句，單句最長 2,638 words）
 
 ### 1c. 候選生成重構 🔴 這是核心
 

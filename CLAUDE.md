@@ -93,7 +93,7 @@ greedy reference 不是 official oracle、未做 paired test。新 validation pi
 
 ### 已套用並通過 regression tests
 
-以下 patch 已接線。`pytest` 已加入依賴，`tests/` 目前 189 項全過；
+以下 patch 已接線。`pytest` 已加入依賴，`tests/` 目前 200 項全過；
 SciTLDR 官方 conformance 尚未通過；它只在決定保留 optional stress test 時才是必要驗收，不阻塞 GovReport + Multi-News 主線：
 
 | 檔案 | 修正 |
@@ -104,7 +104,8 @@ SciTLDR 官方 conformance 尚未通過；它只在決定保留 optional stress 
 | `src/pipeline/optimizer_dispatch.py` | `pop_size`/`n_gen`/`seed` 接線；**移除靜默 fallback** |
 | `src/objectives/factory.py`、`evaluator.py` | single-sentence 關閉 subset search；Greedy／GRASP／NSGA-II 共用同一 objective 與 feasibility contract，並保存 Pareto front。**raw-sum 禁令只涵蓋「有 `task_profile` 且 `output_mode=multi_sentence`」的路徑**（`factory.py:87-92`）；沒有 `task_profile` 的 legacy_unprofiled 路徑（`factory.py:44-57`）預設仍是 `sum`，見 `docs/research/CODE_AUDIT_IEEE_Access.md` F-14。group coverage 與最終 Pareto policy 尚待完成 |
 | `src/pipeline/candidate_builder.py` | `route_top_k` 只定義 proposals、`min_per_route` 保留 route-specific evidence、RRF 只在 union/guard 內填 total cap；短文件保存 requested/effective reservation 與 shortfall，不再中止整批 run |
-| `src/pipeline/select_sentences.py` | MVP selector 明確使用 normalized RRF salience；`validation_pilot_only` 在 runtime 禁止 test split 並核對 canonical dataset identity；`min_words` 只在完整來源本身不可達時以 exact capacity 逐列調降，candidate-induced infeasibility 仍 fail loud，超過 active output budget 的句子不得消耗 candidate quota |
+| `src/pipeline/select_sentences.py` | MVP selector 明確使用 normalized RRF salience；`validation_pilot_only` 在 runtime 禁止 test split；正式輸出前依 frozen data policy 核對 canonical fingerprint、file/manifest SHA、row/revision/U+FFFD counts 並保存 `dataset_preflight.json`；`min_words` 只在完整來源本身不可達時以 exact capacity 逐列調降，candidate-induced infeasibility 仍 fail loud，超過 active output budget 的句子不得消耗 candidate quota |
+| `src/data/policy.py` | frozen data policy 的執行點：核對 policy SHA-256、row count、dataset revision、content fingerprint、file/manifest SHA 與 U+FFFD 計數；debug subset 一律拒絕。實測三種竄改（改 policy 檔、換資料檔、analysis 錯配）都會 fail loud |
 | `src/eval/oracle.py` | 新增 greedy oracle reference；不是 exact upper bound。SciTLDR official oracle 僅在保留 optional stress test 時實作／重現 |
 
 - 🚫 **絕對不要再加 `except Exception: fallback to greedy`**。研究模式必須 fail loud

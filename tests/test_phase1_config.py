@@ -15,6 +15,11 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_phase1_mvp_config_keeps_budgets_and_routes_explicit():
     cfg = load_yaml(str(ROOT / "configs" / "phase1_mvp_multinews.yaml"))
     assert cfg["experiment"]["status"] == "validation_pilot_only"
+    assert cfg["data_policy"] == {
+        "policy_path": "configs/data_policies/multinews_validation_v1.json",
+        "policy_sha256": "dd72b2c39e92511cf7e3d1d944eb86e34ae7f197d0f188f46ada85076ef3c615",
+        "analysis": "main",
+    }
     assert cfg["compute_budget"] == {
         "mode": "fixed",
         "enabled_routes": ["lexical", "semantic"],
@@ -70,4 +75,11 @@ def test_unknown_experiment_status_fails_closed():
     cfg = _phase1_config()
     cfg["experiment"]["status"] = "typo"
     with pytest.raises(ValueError, match="unknown experiment.status"):
+        validate_experiment_request(cfg, "validation")
+
+
+def test_governed_experiment_cannot_omit_data_policy():
+    cfg = _phase1_config()
+    del cfg["data_policy"]
+    with pytest.raises(ValueError, match="require a data_policy"):
         validate_experiment_request(cfg, "validation")

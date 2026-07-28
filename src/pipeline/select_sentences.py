@@ -24,6 +24,7 @@ from src.utils.io import (
 from src.representations.sent_vectors import SentenceVectors
 from src.representations.similarity import cosine_similarity_matrix
 from src.data.schemas import flatten_sentence_records, validate_candidate_record
+from src.data.policy import validate_dataset_policy_request
 
 from src.pipeline.feature_builder import build_base_scores
 from src.pipeline.candidate_builder import build_candidate_pool
@@ -68,6 +69,15 @@ def validate_experiment_request(cfg: Mapping, requested_split: str) -> None:
             "experiment.status='validation_pilot_only' may only access the "
             f"validation split, not {requested_split!r}"
         )
+    data_policy = cfg.get("data_policy")
+    if not isinstance(data_policy, Mapping):
+        raise ValueError("governed experiments require a data_policy object")
+    if not isinstance(data_policy.get("policy_path"), str):
+        raise ValueError("data_policy.policy_path must be declared")
+    if not isinstance(data_policy.get("policy_sha256"), str):
+        raise ValueError("data_policy.policy_sha256 must be declared")
+    if not isinstance(data_policy.get("analysis"), str):
+        raise ValueError("data_policy.analysis must be declared")
 
 
 def _normalized_dataset_name(value: object) -> str:
@@ -481,8 +491,14 @@ def summarize_jsonl(
     predictions_path: str,
     cfg: Dict,
     requested_split: str,
+    dataset_preflight: Dict | None = None,
 ) -> int:
     """Stream one dataset into an atomic prediction artifact."""
+
+    if dataset_preflight is None:
+        dataset_preflight = validate_dataset_policy_request(
+            cfg, input_path, requested_split
+        )
 
     processed = 0
 
@@ -507,14 +523,24 @@ def main():
     ap.add_argument("--run_dir", default="runs", help="runs output root")
     ap.add_argument("--stamp", default=None, help="optional fixed stamp for output dir")
     ap.add_argument("--optimizer", default=None, help="override optimizer.method in config")
+    ap.add_argument(
+        "--data_policy_analysis",
+        default=None,
+        help="override data_policy.analysis with a name declared by the frozen policy",
+    )
     args = ap.parse_args()
 
     cfg = load_yaml(args.config)
     if args.optimizer:
         cfg.setdefault("optimizer", {})
         cfg["optimizer"]["method"] = args.optimizer
+    if args.data_policy_analysis:
+        if not isinstance(cfg.get("data_policy"), dict):
+            raise ValueError("--data_policy_analysis requires config data_policy")
+        cfg["data_policy"]["analysis"] = args.data_policy_analysis
 
     validate_experiment_request(cfg, args.split)
+    dataset_preflight = validate_dataset_policy_request(cfg, args.input, args.split)
 
     # Guard: Stage2 union input should use fast (non-BERT) optimizers only
     method_opt = (cfg.get("optimizer", {}).get("method") or "").lower()
@@ -533,13 +559,26 @@ def main():
 
     preds_path = os.path.join(out_dir, "predictions.jsonl")
     t0 = time.perf_counter()
-    summarize_jsonl(args.input, preds_path, cfg, args.split)
+    summarize_jsonl(
+        args.input,
+        preds_path,
+        cfg,
+        args.split,
+        dataset_preflight=dataset_preflight,
+    )
     t1 = time.perf_counter()
 
     # dump the config used
     import json
     with open(os.path.join(out_dir, "config_used.json"), "w", encoding="utf-8") as f:
         json.dump(cfg, f, ensure_ascii=False, indent=2)
+    if dataset_preflight is not None:
+        with open(
+            os.path.join(out_dir, "dataset_preflight.json"),
+            "w",
+            encoding="utf-8",
+        ) as f:
+            json.dump(dataset_preflight, f, ensure_ascii=False, indent=2)
     # A formal run is incomplete if its timing artifact cannot be written.
     with open(os.path.join(out_dir, "time_select_seconds.txt"), "w", encoding="utf-8") as f:
         f.write(f"{t1 - t0:.6f}")

@@ -21,7 +21,9 @@ def now_stamp() -> str:
 
 def write_jsonl(path: str, rows: Iterable[Dict[str, Any]]) -> None:
     ensure_dir(os.path.dirname(path) or ".")
-    with open(path, "w", encoding="utf-8") as f:
+    # Scientific artifact hashes must not depend on the writer's operating
+    # system.  Explicit LF prevents Windows from translating ``\n`` to CRLF.
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
         for row in rows:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
 

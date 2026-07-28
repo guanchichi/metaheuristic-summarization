@@ -6,6 +6,11 @@ experiment:
   status: validation_pilot_only
   dataset: multi_news
 
+data_policy:
+  policy_path: configs/data_policies/multinews_validation_v1.json
+  policy_sha256: dd72b2c39e92511cf7e3d1d944eb86e34ae7f197d0f188f46ada85076ef3c615
+  analysis: main
+
 seed: 2024
 
 features:
