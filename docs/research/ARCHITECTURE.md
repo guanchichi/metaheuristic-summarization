@@ -95,7 +95,7 @@ MVP 的通過條件沿用 §10 Freeze gate 的第一條，但只要求單一 pri
 | 角色 | 資料集 | 決策 | 原因與限制 |
 |---|---|---|---|
 | Primary A | **GovReport** | 保留，先做 validation pilot | 長單文件、長摘要，最適合檢驗全局 coverage、scaling 與 adaptive routing；官方約 19.5k 筆，常用 split 為 17,517/973/973，CC BY 4.0。本機尚未下載，正式採用前須驗證原始檔、split、checksum 與 section 可用性。 |
-| Primary B | **Multi-News** | 保留，但必須重建 | 官方 split 44,972/5,622/5,622，適合 cross-document coverage 與去重。現有本機 processed validation 雖有 5,622 筆，但只有扁平 `sentences`，document boundaries 已遺失。 |
+| Primary B | **Multi-News** | 保留；validation 已重建，其他 split 待補 | 官方 split 44,972/5,622/5,622，適合 cross-document coverage 與去重。pinned validation 已重建為 5,621 筆 structurally valid canonical rows，保存 document boundaries，並凍結 main／clean sensitivity policy；train/test 仍待生成，legacy 扁平資料不得用於正式結果。 |
 | Data-quality sensitivity | **Multi-News bad-retrieval-removed / Multi-News+** | 不取代主 benchmark，作 paired sensitivity | 原版有錯誤 retrieval 與無關文件；官方 Multi-News repo 已提供 bad-retrieval-removed 版本，Multi-News+ 另用 LLM 清理。必須保存 mapping、版本與移除規則，不能把兩者混成一個新 split。 |
 | Sanity | CNN/DailyMail | Appendix／sanity | 官方 test 11,490；lead bias 強、文件較短，不是核心方法的理想主場，但可檢查方法是否退化。 |
 | Protocol stress | SciTLDR-AIC | 僅在 official conformance 通過後保留 | 官方單句抽取使 redundancy 與 subset search 幾乎失效；使用 files2rouge 與 max-R1-reference。不能用它證明多目標選句有效。 |
@@ -134,7 +134,7 @@ flowchart LR
 - union 丟失 raw score、rank、route agreement 與原始 document identity。
 - Stage 2 的 `w_bert` 實際加權 TF-IDF。
 - NSGA-II importance 使用總和，與 coverage 一起把解推向長度邊界。
-- current processed Multi-News 遺失 document boundaries，無法真正計算 cross-document coverage。
+- legacy processed Multi-News 遺失 document boundaries，無法真正計算 cross-document coverage；canonical validation 已修復此資料契約，但舊 artifact 的限制不會因此消失。
 - candidate、feature 與 graph 路徑仍有吞掉例外後回傳空值／fallback 的情況。
 - 單句與多句任務共用三目標 formulation，objective semantics 不成立。
 
@@ -281,7 +281,7 @@ CandidateRecord
 
 所有 objective 在單一文件內正規化到固定方向與尺度；不能把未正規化 sum、mean 與成本混在一起。
 
-Phase 1e 實作中，coverage 明確使用 `full source sentences × candidates` 矩陣，redundancy 使用 `candidates × candidates` 矩陣；不得以 candidate-only coverage 冒充 source coverage。prediction 的 `coverage_universe_size` 必須等於完整來源句數，供 artifact audit。
+Phase 1e 已實作此工程契約：coverage 明確使用 `full source sentences × candidates` 矩陣，redundancy 使用 `candidates × candidates` 矩陣；不得以 candidate-only coverage 冒充 source coverage。prediction 的 `coverage_universe_size` 必須等於完整來源句數，供 artifact audit。此處只代表 correctness 已接線，不代表 objective 權重或方法效果已在 validation 證實。
 
 ### 6.2 Task-specific 啟用矩陣
 

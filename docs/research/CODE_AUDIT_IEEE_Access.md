@@ -13,7 +13,7 @@
 > **但版本化 ≠ 可作論文結果**：這些仍跑在 test-tuned legacy artifact 上、使用內部 Lsum 協定、
 > 部分為抽樣、且未做 paired significance test，標籤維持 diagnostic。
 > 少數分析（如 370/500 換行雜訊統計）尚未版本化，仍須重做。
-> working tree 另含尚未提交的 audit patches。
+> 後續修正狀態以 §0.0、`ACTION_PLAN.md` 與目前測試結果為準；下方 legacy 敘述不會隨 working tree 改寫。
 
 ---
 
@@ -41,7 +41,7 @@
 | F-10 | 圖模組 τ 套用不一致 | 🔴 成立 | ✅ 已修 | τ 已傳入 `feature_builder.py` 與 graph route |
 | **F-11** | `centrality` 與 `novelty` 完全反相關 | 🔴 成立 | 🔴 **仍然成立** | **未修**。新 MVP 兩者權重皆 0 所以不觸發,但退化仍存在 |
 | F-12 | 分句用純正則 | 🔴 成立 | 🟡 部分修 | Multi-News canonical 已改 NLTK Punkt；**legacy `preprocess.py` 未動,GovReport/CNN-DM 待做** |
-| F-13 | 其他（requirements 重複、pytest 缺、靜默 fallback…） | 🔴 成立 | ✅ 多數已修 | requirements 去重 + pytest、fallback 移除；**GRASP 目標不一致仍未修** |
+| F-13 | 其他（requirements 重複、pytest 缺、靜默 fallback…） | 🔴 成立 | ✅ canonical 主路徑已修 | requirements 去重 + pytest、fallback 移除；Greedy／GRASP／NSGA-II 共用同一 evaluator。legacy `fast_*` 路徑仍只供舊 artifact 重現 |
 
 ### 目前真正還開著的（不要被上面的 ✅ 誤導）
 
@@ -50,7 +50,7 @@
 3. 🔴 **F-11 centrality/novelty 退化** —— 若日後啟用這兩個特徵會出問題
 4. 🟡 **F-12 legacy 分句、GovReport/CNN-DM 分句規則**
 5. 🟡 **F-4 的正式計時數字**、**F-2 的 published-protocol parity**
-6. 🟡 **F-13 的 GRASP 目標不一致**（建構階段與局部搜尋用不同目標）
+6. 🟡 **F-14 的 legacy_unprofiled raw-sum 例外**與 **F-15 的 legacy unmatched ablation**；兩者不得被誤當成新 canonical pipeline 的 matched evidence
 
 ---
 
@@ -755,7 +755,7 @@ imp = np.sum(self.importance[idx])      # 未正規化的總和
 
 ## 附錄 A：本次已直接修改的程式碼
 
-以下是初次 audit patch 與目前 Phase 1 狀態的對照。pytest 已安裝，現有 **156 tests 全過**；這只代表 correctness regression 與內部 hand-calculated golden 通過，不代表方法效果或 official evaluator parity 已通過。
+以下是初次 audit patch 與目前 Phase 1 狀態的對照。pytest 已安裝，2026-07-29 實跑為 **200 tests 全過**；這只代表 correctness regression、10-document snapshot 與內部 hand-calculated golden 通過，不代表方法效果或 published-protocol parity 已通過。
 Sentence-BERT production route、canonical NLTK segmentation 與 shared objective/selector contract 已接線；baseline 模組與正式 validation 仍未完成。
 
 | 檔案 | 修改內容 | 對應發現 | 驗證 |

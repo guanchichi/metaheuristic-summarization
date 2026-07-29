@@ -1,6 +1,6 @@
 # 總體可行性評估 —— 設計是否有救、主場在哪、文件如何分工
 
-> 日期：2026-07-26
+> 初稿日期：2026-07-26 ｜ 程式／資料狀態覆核：2026-07-29
 > 對象問題：「是不是設計本身就有問題？分數這麼低還投得出去嗎？我們的優勢在哪？架構還有救嗎？」
 > 本文件是策略 memo，不是數字權威來源。Legacy Multi-News 的 ROUGE/Lead 已重現。
 > headroom、位置與 oracle overlap 的腳本**已版本化**至 `scripts/audit/`
@@ -138,7 +138,7 @@ SciTLDR 的舊勝負尚未成立，而且它也不適合當主戰場：
 | 角色 | 資料集 | 說明 |
 |---|---|---|
 | **主 benchmark 1** | **GovReport** | 長單文件、長摘要，多目標 coverage 與 scaling 有意義；PubMed 僅為 GovReport pilot 失敗時的備案 |
-| **主 benchmark 2** | **Multi-News（原版）** | 多文件，可與既有文獻直接比較；必須從原始資料重建 document boundaries |
+| **主 benchmark 2** | **Multi-News（原版）** | 多文件，可與既有文獻直接比較；validation 已從 pinned 原始資料重建並保存 document boundaries，train/test 仍待生成 |
 | Data-quality sensitivity | **Multi-News bad-retrieval-removed／Multi-News+** | 與原版作 paired contamination sensitivity，不取代或混成主 split |
 | Sanity check | CNN/DailyMail | 證明沒有只在特定領域有效；先在官方 test 與同 evaluator 重跑，再誠實報告勝負 |
 | Stress test | SciTLDR-AIC | 極限壓縮情境；只有在公平重跑追上 PACSUM 時才進主張 |
@@ -241,7 +241,7 @@ SciTLDR 的舊勝負尚未成立，而且它也不適合當主戰場：
 | **計時分解**：載入遠大於推論、純推論比值 ≈1.0 | 腳本已版本化（`scripts/audit/plm_timing.py`）。**載入佔比在兩次執行間為 78% 與 93%，不穩定，不可引用特定百分比**；只有「推論比值 ≈1.0」是穩定結論。須依鎖定 runtime protocol 重測 |
 | legacy greedy references：SciTLDR 3 句 0.5136、Multi-News 約 0.59 | 只能診斷，非 exact upper bound、非 official protocol，不可直接引用 |
 | **pymoo mutation 實測**：per-individual 1.0、per-gene 1/n_var≈0.02 | 直接回答 R4 的疑問 |
-| **5 項程式 patch 已套用** | 目前只有 compile/manual smoke 與部分完整 evaluator 重算；pytest、official conformance 與完整 regression 尚未完成 |
+| **Phase 1 canonical 主路徑已重構** | 200 tests、10-document snapshot、shared objective/constraint、candidate provenance/RRF handoff 與 Multi-News validation policy preflight 已通過；這仍只證明 correctness。published-protocol parity、GovReport/CNN-DM、正式成本 pilot 與品質 validation 尚未完成 |
 
 ### 4.3 我必須修正自己的一個地方
 
@@ -261,7 +261,7 @@ SciTLDR 的舊勝負尚未成立，而且它也不適合當主戰場：
 | 新架構設計（provenance fusion、adaptive routing） | `paper_revision_plan_IEEE_Access.md` |
 | **已重現的 legacy 數字** | `CODE_AUDIT_IEEE_Access.md`，仍須看每筆證據標籤 |
 | **策略與 exploratory diagnostics** | 本文件，不作數字權威 |
-| 已套用的程式 patch | 程式稽核版；目前僅部分 smoke-tested，不能等同 Phase 1 完成 |
+| 目前程式狀態 | 以 `ACTION_PLAN.md` Phase 1 與 `CODE_AUDIT_IEEE_Access.md` §0.0 為準；canonical 主路徑已有完整內部 regression，但 Phase 1 仍因外部協定、多資料集與 freeze 工作未完成 |
 
 **→ 以研究主計畫為規範，只有通過 evidence-level 檢查的結果才能回填；探索性數字不得因寫入本文件而升格。**
 
@@ -285,7 +285,7 @@ SciTLDR 的舊勝負尚未成立，而且它也不適合當主戰場：
 
 | 插入位置 | 新增項目 |
 |---|---|
-| Phase 1（correctness refactor） | 5 項已套用 patch（見 `CODE_AUDIT_IEEE_Access.md` 附錄 A）須完成 pytest、official conformance 與 regression 後才算驗收 |
+| Phase 1（correctness refactor） | canonical 主路徑的 200 tests、snapshot、shared objectives 與 Multi-News frozen-policy preflight 已完成；published-protocol parity、GovReport/CNN-DM、正式成本 pilot 與 validation-frozen output policy 仍是未完成範圍 |
 | Phase 2（baseline validation） | **Lead 必須是第一個跑的 baseline**，且長度預算嚴格對齊。這是最便宜的 reality check |
 | Phase 3（方法實驗） | **新增核心指標：候選池對 validated oracle／greedy reference 的 recall@K，以及選句位置分布**。先在 validation 建立可重現版本 |
 | Phase 1–2 | 重建 GovReport 與原版 Multi-News 作兩個 primary benchmarks；cleaned variants 作 paired sensitivity，PubMed 只作備案 |
@@ -309,4 +309,4 @@ SciTLDR 的舊勝負尚未成立，而且它也不適合當主戰場：
 
 **時間**：研究主計畫的 Phase −1 至 6 原始工作量約 6–9 週；納入核心方法改動與新資料集後，保守估計 **8–12 週**。
 
-**最後一句實話**：這個專案的核心概念（zero-training、可解釋 provenance、多目標成本控制）是有價值的，ICACT 的獎不是白拿的。但目前的**實作**距離那個概念還很遠 —— 它現在是一個包裝得很複雜的 Lead baseline。把候選池的 lead bias 打破，讓系統真的去看文件中後段，這個專案就有機會變成它本來想成為的東西。
+**最後一句實話**：這個專案的核心概念（zero-training、可解釋 provenance、多目標成本控制）是有價值的，ICACT 的獎不是白拿的。legacy 系統實際上接近一個包裝得很複雜的 Lead baseline；新 canonical pipeline 已修掉多個造成此現象的工程缺陷，但尚無 validation 品質結果，不能先假定已經擺脫 lead bias。下一步仍是用同 split、同 budget 的 Lead 與強 baseline 直接驗證。

@@ -3,7 +3,7 @@
 > 這是**唯一的執行清單**。研究標準以 `paper_revision_plan_IEEE_Access.md` 為準；程式稽核與策略評估的結論全部收斂到這裡。
 > 每天工作看這份就好，需要理由再回去翻對應的分析文件。
 >
-> 版本：2026-07-26 ｜ 進度標記：`[ ]` 未開始 `[~]` 進行中 `[x]` 完成 `[!]` 卡住
+> 版本：2026-07-29 ｜ 進度標記：`[ ]` 未開始 `[~]` 進行中 `[x]` 完成 `[!]` 卡住
 
 ---
 
@@ -38,28 +38,28 @@
 
 ### 必須先接受的三個事實
 
-- [ ] 🔴 **接受 F-0 的正確範圍**：legacy Multi-News ExpB 沒有贏過同資料同 evaluator 的 Lead（R-2 −0.0048、R-Lsum −0.0021）；CNN/DM 尚無同 split 同 evaluator 的有效勝負
+- [x] 🔴 **接受 F-0 的正確範圍**：legacy Multi-News ExpB 沒有贏過同資料同 evaluator 的 Lead（R-2 −0.0048、R-Lsum −0.0021）；CNN/DM 尚無同 split 同 evaluator 的有效勝負
       → 研究主計畫 §6.1「連 Lead 都贏不過就停止投稿並重新設計」的 No-Go 條件**已經觸發**
-- [ ] 🔴 **接受 P0-01**：`runs/tuning_experiments/` 全部 11 個 run 都是 test set 調出來的 → **既有結果全部作廢**
-- [ ] 🔴 **接受病因假說**：系統選句 61.7% 與 Lead 重疊、22.8% 命中 legacy greedy reference
+- [x] 🔴 **接受 P0-01**：`runs/tuning_experiments/` 全部 11 個 run 都是 test set 調出來的 → **既有結果全部作廢**
+- [x] 🔴 **接受病因假說**：系統選句 61.7% 與 Lead 重疊、22.8% 命中 legacy greedy reference
       → 重現腳本已版本化於 `scripts/audit/selection_diagnostics.py`，數字可重跑確認；
         但仍跑在 test-tuned legacy artifact 上、200 篇抽樣、非 official oracle，須在新 validation pipeline 重做
 
 ### 決策
 
-- [ ] 選定研究路線（建議 **研究主計畫路線 A：方法型**）
+- [x] 選定研究路線：**研究主計畫路線 A（方法型）**；是否成功仍由 validation Go/No-Go 決定
       → 核心方法貢獻 = **打破候選池的 lead bias + provenance-aware fusion + budget-aware routing**
-- [ ] 選定主 benchmark（首選 **GovReport + 原版 Multi-News**；Multi-News bad-retrieval-removed／Multi-News+ 作 paired data-quality sensitivity，PubMed 是需另作資料／成本 pilot 的替代）
+- [x] 選定主 benchmark：**GovReport + 原版 Multi-News**；Multi-News clean variant 作 paired data-quality sensitivity，PubMed 是需另作資料／成本 pilot 的替代
       → CNN/DM 降為 sanity check、SciTLDR 降為 stress test
-- [ ] 寫下 **Go/No-Go 條件**並簽字（依研究主計畫 §9）
-- [ ] 寫下 **canonical method specification**：每條公式對應哪個函式（研究主計畫 §3.1 的產出）
+- [x] 寫下 **Go/No-Go 條件**（研究主計畫 §9 與 `ARCHITECTURE.md` freeze gate）；最終 configuration 仍須 validation 後簽字凍結
+- [x] 寫下 **canonical method specification**：`ARCHITECTURE.md` 為技術規格來源；目前是 Target Architecture v1，尚未 freeze
 
 ### 凍結
 
-- [ ] 對已核對的 legacy commit `1b9fe6f` 建立 annotated tag `legacy_ict_express`；不可把目前未提交修正誤標成 legacy
-- [ ] 在 `runs/README.md` 寫明「以下結果為 test-set 污染，不得用於新論文」
+- [x] 對已核對的 legacy commit `1b9fe6f` 建立 annotated tag `legacy_ict_express`；不可把目前未提交修正誤標成 legacy
+- [x] 在 `runs/README.md` 寫明「以下結果為 test-set 污染，不得用於新論文」
 
-**Gate −1**：路線、主 benchmark、Go/No-Go、method spec 四者都白紙黑字寫定。
+**Gate −1：✅ 已通過。** 路線、主 benchmark、Go/No-Go、method spec 已寫入版本化文件；這不等於架構或超參數已完成 validation freeze。
 
 ---
 
@@ -67,7 +67,7 @@
 
 > 詳細指令見 `REPO_CLEANUP.md`。這階段純粹是降低後續的認知負擔。
 
-- [ ] 歸檔 100 個 legacy configs、237 個 archived runs、35 個 archived scripts
+- [x] 100 個 legacy configs、237 個 archived runs、35 個 archived scripts 已位於 archive 路徑並由 `.gitignore` 排除；本機內容保留，未做破壞性刪除
 - [ ] 將疑似死碼 `src/pipeline/build_features.py` 移入 legacy archive；先做入口與歷史重現檢查，不直接刪除
 - [ ] `frontend/`、`backend/`、`experimental/`、`notebooks/` 移出研究主線（另開 repo 或標明與論文無關）
 - [~] runtime／CI requirements 已拆分且重複宣告已清除；正式 Python／套件 lockfile 與乾淨環境重製仍未完成
@@ -81,9 +81,9 @@
 
 > 目標：讓每個數字都可被獨立驗證。這階段不追求分數。
 
-### 1a. Patch 已套用，但尚未完成驗收
+### 1a. Patch 與核心 regression 已完成，多資料集／外部協定驗收仍待補
 
-- [~] `src/eval/rouge.py` → 已改 ROUGE-Lsum、同一 reference 由最高 R1 選定、長度 mismatch fail；待 pytest 與 published-protocol parity
+- [~] `src/eval/rouge.py` → 已改 ROUGE-Lsum、同一 reference 由最高 R1 選定、長度 mismatch fail，內部 golden/regression 已通過；published-protocol parity 仍待驗證
 - [~] `src/eval/oracle.py` → 已有 greedy oracle reference；不得稱 exact upper bound。SciTLDR official single-sentence oracle 僅在決定保留該 stress test 時才實作／重現
 - [x] `src/features/graph.py` → dense input 不被 mutation、dangling mass、zero diagonal、sparse edge bound 均有 regression tests
 - [x] `src/models/extractive/encoder_rank.py` → 模型快取、完整輸入 batch encode、revision/truncation artifact 已接線；pinned MiniLM CPU smoke 與 3-row canonical pipeline 通過（GPU 與正式成本屬後續 cost pilot）
@@ -96,7 +96,7 @@
 **1a 的共同驗收條件**（全部完成才能把上面的 `[~]` 改成 `[x]`）：
 
 - [x] `pip install pytest` 並讓 `tests/` 能跑（2026-07-28：200 passed）
-- [ ] 每個 patch 都有對應的 regression test（見 1e）
+- [~] Phase 1 canonical 主路徑的 patch 已有 golden／regression／10-document snapshot；TF-IDF/TF-ISF similarity parity、published-protocol parity 與尚未實作的多資料集路徑不在現有 200 tests 的完成範圍
 - [ ] **條件式**：若保留 SciTLDR stress test，official single-sentence oracle 須重現 R1 ≈ 52.4；若不保留，維持 evaluator fail-closed 即可，不阻塞 Phase 1
 
 ### 1b. 資料層
@@ -105,7 +105,7 @@
 - [~] canonical Multi-News 已改用 deterministic NLTK Punkt 並保存 char-span mapping；GovReport／CNN-DM 仍須各自驗證分句規則
       （legacy 正則分句曾造成 358/37349 個「句子」超過 80 字，最長 855 字，該 flat artifact 不得進正式實驗）
 - [x] Multi-News preprocessor 正確保留 `|||||` 分隔與換行 mapping；U+FFFD 預設 fail closed。正式 `multinews-validation-v1` 政策已在看 validation 分數前凍結：主分析保留 5,621 列且禁止修字，另以固定 72-row manifest 產生 5,549-row clean sensitivity；runner 強制核對 policy、dataset 與 manifests 的 SHA/fingerprint
-- [~] 已實作從 pinned 作者資料重建 Multi-News，保存 boundary、source order、raw char span、hash 與 original-to-cleaned mapping；待實際產生三個完整 split 與 manifest，現有扁平 `sentences` 不得進正式實驗
+- [~] 已實作從 pinned 作者資料重建 Multi-News，保存 boundary、source order、raw char span、hash 與 original-to-cleaned mapping；validation 的 5,621-row main 與 5,549-row clean sensitivity 已生成並受 frozen policy 守門，train/test 與各自 manifest 仍待生成。legacy 扁平 `sentences` 不得進正式實驗
 - [ ] 下載並驗證 GovReport 官方資料：split、row count、checksum、license、section metadata 與異常列規則
 - [x] `max_words / max_sentences / max_model_tokens / candidate_budget / compute_budget` 已拆成不同設定與 output artifact；`unit: words` 不再繞過 selector
 - [ ] 重建 **CNN/DM 官方 split**：train 287,113 / validation 13,368 / **test 11,490**
@@ -301,9 +301,9 @@
 
 | Phase | 狀態 | Gate 通過 | 備註 |
 |---|---|---|---|
-| −1 決策與凍結 | `[ ]` | | |
-| 0 專案整理 | `[ ]` | | |
-| 1 正確性重構 | `[~]` | | 1a 僅 patch/smoke，未達 DoD |
+| −1 決策與凍結 | `[x]` | ✅ | 研究路線、primary benchmarks、Go/No-Go、Target Architecture v1、legacy tag 與 invalid-run 標記均已版本化；最終 configuration freeze 屬 Phase 3 |
+| 0 專案整理 | `[~]` | | archive 已隔離、requirements/CI 已整理；死碼、非論文模組與 lockfile 仍待處理 |
+| 1 正確性重構 | `[~]` | 核心內部 Gate 1 tests 已滿足 | 200 tests、10-document snapshot、shared objectives、Multi-News validation policy/preflight 已完成；外部 evaluator parity、GovReport/CNN-DM、正式成本 pilot 與 validation-frozen output policy 仍待補 |
 | 2 Baseline | `[ ]` | | |
 | 3 方法開發 | `[ ]` | | 🔴 中途檢查點在這 |
 | 4 正式 test | `[ ]` | | |

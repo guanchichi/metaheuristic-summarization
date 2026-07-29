@@ -1,6 +1,6 @@
 # IEEE Access 全面重建計畫
 
-版本：2026-07-26 技術稽核版  
+版本：2026-07-26 技術稽核版 ｜ 程式／資料狀態覆核：2026-07-29
 適用範圍：ICACT 得獎論文的期刊擴充、ICT Express 拒稿稿件、metaheuristic-summarization 研究程式與既有實驗結果
 
 文件治理：本文件是研究標準與投稿 gate 的唯一規範來源；`ACTION_PLAN.md` 是日常執行清單；`CODE_AUDIT_IEEE_Access.md` 與 `STRATEGY_ASSESSMENT.md` 只能作證據快照與衍生判斷。若數字衝突，以可重現 artifact、版本化程式、資料 fingerprint 與明確 evaluator protocol 為準，而不是以任何一份敘述文件為準。
@@ -43,6 +43,40 @@
 ## 2. 已確認的 P0 致命問題
 
 以下任一項未解決，都不應投稿。
+
+### 2.0 ⚠️ 各 P0 的目前狀態（2026-07-29 逐項對程式核對）
+
+> **以下 P0-01～P0-10 的內文描述的是稽核當時（commit `1b9fe6f`）的狀態，以現在式書寫。**
+> 其中多項已在 Phase 1 重構中修好。沒有這張表，讀者會把已完成的項目當成待辦，
+> 也可能誤以為投稿被 10 個問題同時擋住。
+>
+> 「新 pipeline」= `configs/phase1_mvp_multinews.yaml` 的 canonical 路徑；
+> 「legacy」= `configs/1_*.yaml` / `2_*.yaml`，**刻意不修**，只供重現舊 artifact。
+
+| # | 問題 | 狀態 | 依據 |
+|---|---|---|---|
+| **P0-01** | test set 上調參選模型 | 🟡 **legacy 成立；新 pipeline 已加守門** | `select_sentences.py` 的 `validation_pilot_only` 在 runtime 禁止 test split。**legacy 的 11 個 run 仍然作廢** |
+| **P0-02** | CNN/DM 用 validation 卻比文獻 test | 🟡 **舊結果作廢；是否重建取決於實驗矩陣** | 尚無 CNN/DM canonical artifact。若保留為 sanity check，必須重建官方 test；若從新稿移除，則不得再引用舊 CNN/DM 勝負 |
+| P0-03 | Stage-1 top-K 與實作不符 | ✅ **已修** | 各 route 在完整輸入排名；`route_top_k` 只定義 proposal depth，`min_per_route` 才是保留額 |
+| P0-04 | Stage 2 沒有融合 BERT 分數 | ✅ **已修** | semantic route + `selector.salience_source: rrf_fusion`；實測改變 semantic 分數會改變選句 |
+| P0-05 | SciTLDR oracle 與 multi-reference | 🟡 內文已有狀態標註 | `preprocess_scitldr` 已存 `references: list`；official conformance 仍為條件式 |
+| P0-06 | ROUGE-L 協定錯誤 | ✅ **已修**（parity 待驗） | `rougeLsum` + 手算 golden tests；與 published Perl ROUGE 的 parity 尚未驗證 |
+| P0-07 | NSGA-II 參數與 config 不一致 | ✅ **已修** | `pop_size`/`n_gen`/`seed` 已接線、移除靜默 fallback、有 regression test |
+| P0-08 | 公式與實作多處不一致 | 🟡 **部分修** | 已修：TF-ISF v2 改用非負平滑、graph 不再就地竄改、τ 已接線。**仍未修：`length_scores` 除以「文件內觀察最大值」而非論文的 `min(len/40,1)`；`centrality` 與 `novelty` 完全反相關** |
+| P0-09 | Runtime protocol 不可重現 | 🟡 **程式已修，數字待重測** | `load_encoder()` 模型快取已修。**正式計時必須依鎖定 protocol 重測**（載入佔比在兩次量測間為 78% 與 93%，不穩定） |
+| P0-10 | Data integrity 與 preprocessing | 🟡 **Multi-News validation 已修；其餘待補** | validation 的 canonical schema、pinned revision、health report、fingerprint、frozen main/clean policy 與防竄改守門已完成；Multi-News train/test、GovReport 與可選 CNN/DM 尚未完成 |
+
+**目前真正還擋著投稿的**：
+
+1. 🔴 **本文件 §6 的 baseline 一個都還沒實作** —— 這是回答新 pipeline F-0 的最便宜且最大的缺口，見 §9 Go/No-Go
+2. 🔴 **第二個 primary benchmark GovReport 尚未建立**；Multi-News 也只有 validation 完成，train/test 尚未生成
+3. 🔴 **P0-08 的殘留** —— `length_scores` 與 `centrality`/`novelty` 兩項
+4. 🟡 **P0-02 是條件式工作** —— 保留 CNN/DM sanity 才需重建 official test；不保留就必須刪除舊結果與主張
+5. 🟡 P0-01 的 legacy artifact 永久作廢（不是待修，是既成事實）
+6. 🟡 P0-06 的 published-protocol parity、P0-09 的正式計時，以及 validation-frozen Pareto/output policy
+
+> ⚠️ **「P0 修好」不等於「可以投稿」。** §9 的 Go 條件要求相對強 baseline 有一致正向效果，
+> 而 baseline 尚未存在，因此 F-0（系統是否勝過 Lead）**在新 pipeline 上仍未被回答**。
 
 ### P0-01. Multi-News 在 test set 上調參與選模型
 
@@ -1037,11 +1071,11 @@ IEEE Access 的 reproducibility guidance 特別要求 artifact dependencies、in
 - [ ] test 從未用於調參。
 - [ ] CNN/DailyMail 使用 11,490 筆 test。
 - [ ] **條件式**：若 SciTLDR 保留在實驗中，使用官方 split、files2rouge、單句限制與 max-R1-reference 並重現官方 oracle；否則明確從實驗矩陣移除。
-- [ ] Multi-News data-quality 規則預先固定。
-- [ ] Stage 1 真正輸出 top-K ranked candidates。
-- [ ] Stage 2 使用真實、可追溯的 PLM/graph/statistical scores。
-- [ ] NSGA effective parameters、seed 與結果完全可追溯。
-- [ ] 無 silent fallback。
+- [x] Multi-News validation data-quality 規則已在新結果前固定為 versioned main + paired clean sensitivity policy；train/test 仍須各自受版本化 policy／manifest 管理。
+- [x] 新 canonical pipeline 的 Stage 1 真正輸出各 route top-K ranked candidates，並保存 provenance／reservation／guard。
+- [x] 新 canonical pipeline 的 Stage 2 使用真實、可追溯的 PLM/graph/statistical route scores；route 效果仍待 validation ablation。
+- [x] 新 canonical pipeline 的 NSGA effective parameters、seed、objective 與 Pareto artifact 可追溯；最終 output policy 仍待 validation freeze。
+- [x] 新 canonical pipeline 的 candidate／feature／optimizer failure 無 silent fallback；legacy 路徑不得產生新稿結果。
 - [ ] 多句資料的 ROUGE-Lsum 與 sentence boundaries 正確；SciTLDR 的官方 ROUGE-L 協定另行驗證。
 - [ ] 強 baseline 在同一 evaluator 下重跑。
 - [ ] 5 至 10 seeds、paired 95% CI、multiple-comparison correction。

@@ -1,6 +1,7 @@
 # 專案整理計畫
 
 > 對應 `ACTION_PLAN.md` 的 Phase 0。以下是提案，不是已授權的刪除清單；任何 move/delete/tag 前都要先核對 dirty worktree、legacy 重現需求與精確目標。
+> 初始盤點數字保留為 2026-07-26 snapshot；目前任務狀態已覆核至 2026-07-29，應以 §7 為準。
 
 ---
 
@@ -102,7 +103,7 @@ git tag -a legacy_ict_express 1b9fe6f -m "Legacy ICT Express code and results"
 
 ## 4. 已隔離但可以再壓縮的
 
-> ✅ **2026-07-26 更新：這一節的目標已達成一半。**
+> ✅ **2026-07-29 覆核：版本庫隔離目標已達成；本機壓縮／移出工作區仍未執行。**
 > `configs/_legacy_archive/`、`scripts/_archive/`、`runs/_archive_2026_01_15/`、
 > `data/processed/_archive_legacy/` 已透過 `.gitignore` 的 `**/_archive*/`、`**/_legacy_*/`
 > 規則**從版本庫排除**（repo 由 250 檔降到 131 檔）。

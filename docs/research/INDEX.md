@@ -15,13 +15,13 @@
 1. 🔴 **legacy Multi-News 當家配置**在同資料、同 evaluator 下沒有贏過本地 Lead —— R-2 輸 0.0048、R-Lsum 輸 0.0021；這是 test-tuned artifact 的診斷，不是新論文結果
 2. 🔴 `runs/tuning_experiments/` 的 11 個 run 全是 5,622 筆 test，且用來選設定；相關 legacy 主結果不可作新稿證據
 
-→ 詳見 `ACTION_PLAN.md` 的 Phase −1。**在接受這兩件事之前，不要開始改論文。**
+→ 詳見 `ACTION_PLAN.md` 的 Phase −1；這兩件事已被版本化為研究治理前提。**後續不得再以 legacy 結果直接改寫或支撐新論文。**
 
-### 目前進度速覽（2026-07-26）
+### 目前進度速覽（2026-07-29）
 
 | | 狀態 |
 |---|---|
-| Phase 1 程式契約 | 🟡 **大部分完成** —— route 獨立排名、provenance 進 selector、shared objective/constraint evaluator、source-vs-candidate length feasibility、Pareto artifact、canonical schema；見 `ACTION_PLAN.md` Phase 1 |
+| Phase 1 程式契約 | 🟡 **大部分完成** —— route 獨立排名、provenance 進 selector、shared objective/constraint evaluator、source-vs-candidate length feasibility、Pareto artifact、canonical schema 與 frozen-policy preflight 已完成；published-protocol parity、GovReport/CNN-DM 資料層、正式成本 pilot 與 validation-frozen output policy 仍未完成；見 `ACTION_PLAN.md` Phase 1 |
 | 測試 | ✅ 200 項全過；CI 已接 GitHub Actions |
 | **baseline** | 🔴 **完全沒做** —— Gate 2 的全部內容。沒有它，上面那條 F-0 永遠無法回答 |
 | 新 pipeline 的實測結果 | 🔴 **零** —— 還沒跑過任何 validation 評估 |
