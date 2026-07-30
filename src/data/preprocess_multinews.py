@@ -9,11 +9,10 @@ import re
 import unicodedata
 from typing import Any, Dict, List, Mapping, Sequence, Tuple
 
-from nltk.tokenize import PunktSentenceTokenizer
-from nltk.tokenize.punkt import PunktParameters
 from tqdm import tqdm
 
 from src.data.schemas import build_document_example
+from src.data.sentence_split import build_sentence_tokenizer
 from src.utils.io import ensure_dir, write_jsonl_atomic
 
 
@@ -56,39 +55,7 @@ def _normalize_text(text: str) -> str:
     return re.sub(r"\s+", " ", unicodedata.normalize("NFC", text)).strip()
 
 
-def _build_sentence_tokenizer() -> PunktSentenceTokenizer:
-    """Create a deterministic Punkt tokenizer without runtime downloads."""
-
-    parameters = PunktParameters()
-    parameters.abbrev_types.update(
-        {
-            "adm",
-            "capt",
-            "col",
-            "dr",
-            "e.g",
-            "gen",
-            "gov",
-            "i.e",
-            "jr",
-            "lt",
-            "mr",
-            "mrs",
-            "ms",
-            "prof",
-            "rep",
-            "rev",
-            "sen",
-            "sr",
-            "st",
-            "u.s",
-            "vs",
-        }
-    )
-    return PunktSentenceTokenizer(parameters)
-
-
-_SENTENCE_TOKENIZER = _build_sentence_tokenizer()
+_SENTENCE_TOKENIZER = build_sentence_tokenizer()
 
 
 def resolve_data_files(
