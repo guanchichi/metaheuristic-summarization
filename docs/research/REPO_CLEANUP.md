@@ -138,7 +138,7 @@ scikit-learn>=1.3.0     # 第 27 行  ← 重複；實際有效下限為 1.3.0
 ```
 
 - [x] 合併重複項，鎖定單一版本（2026-07-26：`pymoo` / `scikit-learn` 各只剩一條）
-- [x] 補上 `pytest`（已在依賴與 CI；`tests/` 目前 200 項全過）
+- [x] 補上 `pytest`（已在依賴與 CI；2026-07-30 實跑 202 項全過）
 - [x] 拆出 `requirements-demo.txt`（fastapi / flask / uvicorn）與 `requirements-ci.txt`（輕量 CI）
 - [x] 補上 `nltk`（canonical Multi-News 分句已使用 Punkt）
 - [ ] 補上 `bert-score`（Phase 5 語意指標才需要）

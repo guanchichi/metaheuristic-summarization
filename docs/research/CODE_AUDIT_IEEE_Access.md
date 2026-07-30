@@ -773,7 +773,7 @@ imp = np.sum(self.importance[idx])      # 未正規化的總和
 
 ## 附錄 A：本次已直接修改的程式碼
 
-以下是初次 audit patch 與目前 Phase 1 狀態的對照。pytest 已安裝，2026-07-29 實跑為 **200 tests 全過**；這只代表 correctness regression、10-document snapshot 與內部 hand-calculated golden 通過，不代表方法效果或 published-protocol parity 已通過。
+以下是初次 audit patch 與目前 Phase 1 狀態的對照。pytest 已安裝，2026-07-30 實跑為 **202 tests 全過**；這只代表 correctness regression、10-document snapshot 與內部 hand-calculated golden 通過，不代表方法效果或 published-protocol parity 已通過。
 Sentence-BERT production route、canonical NLTK segmentation 與 shared objective/selector contract 已接線；baseline 模組與正式 validation 仍未完成。
 
 | 檔案 | 修改內容 | 對應發現 | 驗證 |

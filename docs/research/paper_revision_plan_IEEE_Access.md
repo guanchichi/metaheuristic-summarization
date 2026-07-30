@@ -1,6 +1,6 @@
 # IEEE Access 全面重建計畫
 
-版本：2026-07-26 技術稽核版 ｜ 程式／資料狀態覆核：2026-07-29
+版本：2026-07-26 技術稽核版 ｜ 程式／資料狀態覆核：2026-07-30
 適用範圍：ICACT 得獎論文的期刊擴充、ICT Express 拒稿稿件、metaheuristic-summarization 研究程式與既有實驗結果
 
 文件治理：本文件是研究標準與投稿 gate 的唯一規範來源；`ACTION_PLAN.md` 是日常執行清單；`CODE_AUDIT_IEEE_Access.md` 與 `STRATEGY_ASSESSMENT.md` 只能作證據快照與衍生判斷。若數字衝突，以可重現 artifact、版本化程式、資料 fingerprint 與明確 evaluator protocol 為準，而不是以任何一份敘述文件為準。
@@ -1081,7 +1081,7 @@ IEEE Access 的 reproducibility guidance 特別要求 artifact dependencies、in
 - [x] 新 canonical pipeline 的 Stage 2 使用真實、可追溯的 PLM/graph/statistical route scores；route 效果仍待 validation ablation。
 - [x] 新 canonical pipeline 的 NSGA effective parameters、seed、objective 與 Pareto artifact 可追溯；最終 output policy 仍待 validation freeze。
 - [x] 新 canonical pipeline 的 candidate／feature／optimizer failure 無 silent fallback；legacy 路徑不得產生新稿結果。
-- [ ] 多句資料的 ROUGE-Lsum 與 sentence boundaries 正確；SciTLDR 的官方 ROUGE-L 協定另行驗證。
+- [ ] GovReport／Multi-News 的 ROUGE-Lsum、共用 Punkt sentence boundaries 與 published-protocol parity 全部驗證；SciTLDR 不屬 v1。
 - [ ] 強 baseline 在同一 evaluator 下重跑。
 - [ ] 5 至 10 seeds、paired 95% CI、multiple-comparison correction。
 - [ ] full pipeline runtime、memory、hardware 完整。
