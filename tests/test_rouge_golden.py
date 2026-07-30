@@ -1,16 +1,21 @@
 """Hand-calculated golden tests for the ROUGE evaluation protocol.
 
-These pin the three decisions that made the ICT Express numbers wrong or
+These pin the four decisions that made the ICT Express numbers wrong or
 unstable, so a future change cannot quietly undo them:
 
 1. rougeL and rougeLsum are different metrics. The draft reported rougeL for
    multi-sentence summaries, which computes one LCS over the whole summary and
-   under-scores extracts (F-2: 0.2014 vs 0.3857 on Multi-News).
+   under-scores extracts (F-2: 0.2014 vs 0.3857 on Multi-News, under the
+   sentence splitter in effect when those numbers were recorded).
 2. Prediction and reference must be segmented by the same function. Honouring
    the source's stray newlines on one side only silently lowers the score.
 3. Multi-reference data selects one reference by max ROUGE-1 and reports every
    metric from that same reference. Taking an independent maximum per metric is
    a different, more optimistic protocol.
+4. Sentence boundaries must mean the same thing on the data side and the
+   evaluation side. Both now go through the one shared Punkt tokenizer in
+   ``src/data/sentence_split.py`` instead of each having its own splitting
+   rule.
 
 Expected values are derived by hand below, not recorded from a run.
 """
@@ -18,6 +23,8 @@ Expected values are derived by hand below, not recorded from a run.
 import pytest
 from rouge_score import rouge_scorer
 
+from src.data.sentence_split import span_tokenize, split_sentences
+from src.data.preprocess_multinews import segment_document
 from src.eval.rouge import (
     _as_lsum,
     rouge_scores,
@@ -99,8 +106,8 @@ class TestSegmentationSymmetry:
         assert symmetric > asymmetric
 
     def test_default_normalises_whitespace_before_splitting(self):
-        """The default path collapses newlines to spaces, then splits on
-        sentence punctuation, so both sides are segmented identically."""
+        """The default path collapses newlines to spaces, then splits with
+        the shared Punkt tokenizer, so both sides are segmented identically."""
         assert _as_lsum(self.NOISY_PREDICTION) == (
             "delta epsilon zeta.\nalpha beta gamma."
         )
@@ -110,6 +117,57 @@ class TestSegmentationSymmetry:
         assert rouge_scores([self.NOISY_PREDICTION], [REFERENCE])[
             "rougeLsum"
         ] == pytest.approx(1.0)
+
+
+class TestSharedTokenizerParity:
+    """The evaluator (``src/eval/rouge.py``) and the Multi-News canonical
+    preprocessing pipeline (``src/data/preprocess_multinews.py``) must agree
+    on where a sentence starts and ends. Before this change they used two
+    independent splitters (a hand-written regex in the evaluator vs. a Punkt
+    tokenizer in preprocessing) with no test tying them together."""
+
+    TEXT = (
+        "Mr. Smith met U.S. officials on Tuesday. "
+        "Reports said 3.5 million people attended the rally."
+    )
+
+    def test_evaluator_and_data_layer_agree_on_sentence_boundaries(self):
+        via_data_layer_spans = [
+            self.TEXT[start:end] for start, end in span_tokenize(self.TEXT)
+        ]
+        via_data_layer_segment_document, _ = segment_document(self.TEXT)
+        via_evaluator = _as_lsum(self.TEXT).split("\n")
+
+        assert via_data_layer_spans == split_sentences(self.TEXT)
+        assert via_evaluator == via_data_layer_spans
+        # segment_document additionally whitespace-normalises each sentence,
+        # so compare after the same normalisation instead of byte-for-byte.
+        assert via_data_layer_segment_document == [
+            " ".join(s.split()) for s in via_data_layer_spans
+        ]
+
+    def test_abbreviations_are_not_mis_split(self):
+        """A naive ``.!?`` regex (the evaluator's old splitter) cuts after
+        every abbreviation period. The shared Punkt tokenizer, seeded with
+        the abbreviation list in ``src/data/sentence_split.py``, does not."""
+        assert split_sentences(self.TEXT) == [
+            "Mr. Smith met U.S. officials on Tuesday.",
+            "Reports said 3.5 million people attended the rally.",
+        ]
+
+        import re
+
+        old_regex_splitter = re.compile(r"(?<=[.!?。！？])\s+")
+        old_behaviour = [
+            p.strip() for p in old_regex_splitter.split(self.TEXT) if p.strip()
+        ]
+        assert old_behaviour == [
+            "Mr.",
+            "Smith met U.S.",
+            "officials on Tuesday.",
+            "Reports said 3.5 million people attended the rally.",
+        ]
+        assert old_behaviour != split_sentences(self.TEXT)
 
 
 class TestMultiReferenceSelection:
