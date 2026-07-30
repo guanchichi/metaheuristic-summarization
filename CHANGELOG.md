@@ -8,6 +8,21 @@ All notable changes to the `metaheuristic-summarization` project will be documen
 
 ## [Unreleased] - Phase 1e objective/selector isolation
 
+- **Sentence segmentation is now shared between the data layer and the
+  evaluator** (PR #9). `src/eval/rouge.py` previously segmented with a
+  hand-written regex, `(?<=[.!?。！？])\s+`, while `preprocess_multinews.py`
+  used Punkt, so "a sentence" meant two different things on the two sides.
+  The regex also split after every abbreviation period, turning
+  `"Mr. Smith met U.S. officials on Tuesday."` into three sentences. Both
+  sides now go through `src/data/sentence_split.py`.
+
+  > ⛔ **Every previously recorded `rougeLsum` figure is stale.** Measured on
+  > 800 real validation rows (Lead-style extract, 245-word budget):
+  > `rougeLsum` 0.3893 → 0.3925 (**+0.0032**); `rouge1` and `rouge2` are
+  > unchanged at +0.0000, since they do not use sentence boundaries.
+  > Data-side behaviour did not change, so the frozen canonical fingerprint
+  > and the data policy are unaffected.
+
 - Added one shared evaluator for salience, facility coverage, redundancy, scalar
   utility, and non-empty/min-max length feasibility.
 - Facility coverage now evaluates the full source-to-candidate matrix; its
@@ -107,6 +122,9 @@ is a research result: no configuration has been evaluated against a baseline yet
   > A local, ID-matched Lead baseline under the same evaluator scores
   > 0.4331 / 0.1453 / 0.3901 versus the system's 0.4352 / 0.1405 / 0.3880 —
   > i.e. the system does **not** beat Lead on ROUGE-2 or ROUGE-Lsum.
+  > (2026-07-30, PR #9: the two ROUGE-Lsum values are stale — see the
+  > segmentation note at the top of this file. The ROUGE-1 and ROUGE-2
+  > figures, and therefore the conclusion itself, are unaffected.)
 - ~~**Final Configs**: Standardized best-performing configurations in `configs/final/`.~~
   > That directory no longer exists; the current settings are in `configs/` (see its README).
 

@@ -101,7 +101,7 @@ candidates:
 |---|---|---|
 | **CNN/DailyMail** | 🔴 **不作主場** | lead bias 強且摘要短；論文 0.351 與 published Lead-3 0.4042 來自不同 split/evaluator，不能當公平差距，只能視為風險訊號 |
 | **Multi-News** | 🟡 **可留，但不是最佳** | 探索性抽樣顯示 greedy-reference headroom 約 0.1518、句子位置較分散；須版本化重跑後才可形成結論 |
-| **SciTLDR-AIC** | 🟡 **尚未有有效勝負** | legacy Lead-1 與論文 0.234–0.239 使用錯誤的 reference 串接／非官方 evaluator；正式結論必須等 official single-sentence conformance 後重跑 |
+| **SciTLDR-AIC** | 🟡 **尚未有有效勝負；v1 不跑** | legacy Lead-1 與論文 0.234–0.239 使用錯誤的 reference 串接／非官方 evaluator；只有日後重新納入時才需 official single-sentence conformance 後重跑 |
 
 ### 2.2 SciTLDR 不適合當主場
 
@@ -123,7 +123,7 @@ SciTLDR 的舊勝負尚未成立，而且它也不適合當主戰場：
 | 資料集 | 條件 1（lead bias 弱） | 條件 2（多句長摘要） | 綜合 |
 |---|---|---|---|
 | CNN/DailyMail | ❌ 極強 lead bias | ❌ 只有 3 句 | 🔴 最差 |
-| SciTLDR-AIC | ✅ 弱 | ❌ 官方只抽 1 句 | 🟡 只能當 stress test |
+| SciTLDR-AIC | ✅ 弱 | ❌ 官方只抽 1 句 | ⚪ 與核心多句方法不匹配，v1 排除 |
 | Multi-News | 🟡 中等 | ✅ 245 words | 🟢 可用 |
 | **GovReport** | ✅ **長政府報告，資訊分散全文** | ✅ **摘要很長** | 🟢🟢 **理想** |
 | **PubMed / arXiv** | ✅ 科學長文 | ✅ 長摘要 | 🟢🟢 **理想** |
@@ -139,9 +139,10 @@ SciTLDR 的舊勝負尚未成立，而且它也不適合當主戰場：
 |---|---|---|
 | **主 benchmark 1** | **GovReport** | 長單文件、長摘要，多目標 coverage 與 scaling 有意義；PubMed 僅為 GovReport pilot 失敗時的備案 |
 | **主 benchmark 2** | **Multi-News（原版）** | 多文件，可與既有文獻直接比較；validation 已從 pinned 原始資料重建並保存 document boundaries，train/test 仍待生成 |
-| Data-quality sensitivity | **Multi-News bad-retrieval-removed／Multi-News+** | 與原版作 paired contamination sensitivity，不取代或混成主 split |
-| Sanity check | CNN/DailyMail | 證明沒有只在特定領域有效；先在官方 test 與同 evaluator 重跑，再誠實報告勝負 |
-| Stress test | SciTLDR-AIC | 極限壓縮情境；只有在公平重跑追上 PACSUM 時才進主張 |
+| Required data-quality sensitivity | **Multi-News frozen U+FFFD clean sensitivity** | 與 5,621-row main 在共同 5,549 rows 作 paired analysis；不等於 retrieval-cleaned variant |
+| Optional sanity | CNN/DailyMail | 只有 primary 過 Gate 3 且資源允許才跑 frozen official test；不阻塞主線 |
+| Excluded from v1 | SciTLDR-AIC | 單句協定與核心多句方法不匹配；目前不跑，重新納入才需 official conformance |
+| Reserve | Multi-News bad-retrieval-removed／Multi-News+、PubMed | 目前不跑；不能與已 frozen 的 U+FFFD clean sensitivity 混稱 |
 
 ---
 
@@ -237,7 +238,7 @@ SciTLDR 的舊勝負尚未成立，而且它也不適合當主戰場：
 | 🔴 **F-0：legacy Multi-News 未勝 Lead** | ExpB 在同資料、同內部 evaluator 下 R-2 −0.0048、R-Lsum −0.0021；CNN/DM 因 split/evaluator 不同，尚無有效勝負 |
 | 🔴 **病因診斷：系統 61.7% 與 Lead 重疊、只有 22.8% 命中 greedy reference** | 腳本已版本化（`scripts/audit/selection_diagnostics.py`）並重現；但仍跑在 legacy artifact、200 篇抽樣、非 official oracle，只支持「優先檢查候選池 lead bias」 |
 | **headroom / lead bias 量化** | 腳本已版本化（`scripts/audit/dataset_headroom.py`）；200 篇抽樣，用來選 pilot，不可直接宣稱理論空間 |
-| **完整 5622 篇的 ROUGE-Lsum** | full benchmark = 0.3857；ExpB = 0.3880，兩者不可混稱同一次 run |
+| **完整 5622 篇的 ROUGE-Lsum** | full benchmark = 0.3857；ExpB = 0.3880，兩者不可混稱同一次 run。⛔ 兩值皆為舊 regex 分句器下的量測（2026-07-30 PR #9 已換共用 Punkt，實測位移 +0.0032），重算前不得引用 |
 | **計時分解**：載入遠大於推論、純推論比值 ≈1.0 | 腳本已版本化（`scripts/audit/plm_timing.py`）。**載入佔比在兩次執行間為 78% 與 93%，不穩定，不可引用特定百分比**；只有「推論比值 ≈1.0」是穩定結論。須依鎖定 runtime protocol 重測 |
 | legacy greedy references：SciTLDR 3 句 0.5136、Multi-News 約 0.59 | 只能診斷，非 exact upper bound、非 official protocol，不可直接引用 |
 | **pymoo mutation 實測**：per-individual 1.0、per-gene 1/n_var≈0.02 | 直接回答 R4 的疑問 |
@@ -288,7 +289,7 @@ SciTLDR 的舊勝負尚未成立，而且它也不適合當主戰場：
 | Phase 1（correctness refactor） | canonical 主路徑的 200 tests、snapshot、shared objectives 與 Multi-News frozen-policy preflight 已完成；published-protocol parity、GovReport/CNN-DM、正式成本 pilot 與 validation-frozen output policy 仍是未完成範圍 |
 | Phase 2（baseline validation） | **Lead 必須是第一個跑的 baseline**，且長度預算嚴格對齊。這是最便宜的 reality check |
 | Phase 3（方法實驗） | **新增核心指標：候選池對 validated oracle／greedy reference 的 recall@K，以及選句位置分布**。先在 validation 建立可重現版本 |
-| Phase 1–2 | 重建 GovReport 與原版 Multi-News 作兩個 primary benchmarks；cleaned variants 作 paired sensitivity，PubMed 只作備案 |
+| Phase 1–2 | 重建 GovReport 與原版 Multi-News 作兩個 primary benchmarks；frozen U+FFFD clean 作 paired sensitivity，external retrieval-cleaned variants 與 PubMed 只作備案 |
 | Phase 4（locked test）之前 | **先在 validation 上確認贏過 Lead**。沒贏就不要解鎖 test |
 
 ### 最重要的一個中途檢查點

@@ -119,6 +119,16 @@ Section 4.4.1 與 Table 7：
 - ROUGE-Lsum：系統**輸 −0.0021**
 - 系統平均多用了約 13 個 whitespace words
 
+> ⛔ **ROUGE-Lsum 欄位已過期**（2026-07-30, PR #9）。evaluator 的分句器從手寫 regex
+> `(?<=[.!?。！？])\s+` 換成 `src/data/sentence_split.py` 的共用 Punkt tokenizer
+> ——舊 regex 在每個縮寫句點後都切一刀，是真 bug。實測（800 篇真實 validation、
+> Lead-style extract、245-word budget）：**R-Lsum +0.0032；R-1 與 R-2 皆 +0.0000**。
+>
+> 因此上表中 `0.3880 / 0.3901 / 0.3895` 三個值與 `−0.0021` 的差距**都必須重跑
+> `scripts.audit.lead_vs_system` 才能再引用**。
+> **R-1 的 `+0.0021` 與 R-2 的 `−0.0048` 不受影響，仍然有效**——F-0 的結論
+> （舊稿「across every metric」不成立）單靠 R-2 落後就已經站得住。
+
 **論文引用的跨論文 Lead 不能代表本地同協定 Lead**：R-2 相差 0.016，R-L 的大差距主要是 ROUGE-L/Lsum 度量不同（見 F-2）。混用來源與 evaluator 是「系統看起來大勝 baseline」的來源。
 
 ### 為什麼會這樣（這不是你們的錯，但必須面對）
@@ -230,6 +240,10 @@ summary = " ".join([sentences[i] for i in selected])   # 空白串接，無換�
 | 目前多句內部 `rougeLsum`（正規化空白後分句） | 0.4337 | 0.1391 | **0.3857** |
 
 Full benchmark artifact 的 ROUGE-L 從 0.2014 變成 ROUGE-Lsum 0.3857；ExpB artifact 則是 0.2019 → 0.3880。這是 metric definition 改變，不是模型品質「提升 91%」。
+
+⛔ **這兩個 Lsum 值是在舊的 regex 分句器下量的**（2026-07-30, PR #9 已換成共用 Punkt
+tokenizer，實測位移 +0.0032）。`full_benchmark_result` 的 `predictions.jsonl` 已不存在，
+**該數字永遠無法在新協定下重算**，只能當歷史紀錄，不得寫進論文。
 
 這一改只讓 metric 名稱與多句內部協定一致，不能推論模型變得有競爭力；同協定 Lead 的 R2 與 R-Lsum 仍較高，且 published-protocol parity 尚未完成。
 
@@ -676,7 +690,11 @@ imp = np.sum(self.importance[idx])      # 未正規化的總和
 
 ## Part 4 — 實驗重跑清單
 
-**修完 R-1 ~ R-5 之後，以下全部要重跑。**
+> ⚠️ **本節保留 2026-07-26 稽核當時的三資料集建議，不是目前執行清單。**
+> 2026-07-30 的 v1 決策已由 `ACTION_PLAN.md` §2.0 取代：必跑 GovReport + 原版 Multi-News，
+> Multi-News frozen U+FFFD clean 作 paired validation；CNN/DailyMail 延後可選，SciTLDR 不排程。
+
+**以下矩陣只用來理解舊稿缺過哪些對照，不得據此自行啟動 CNN/DM 或 SciTLDR。**
 
 ### 必跑（缺一不可）
 
@@ -761,7 +779,7 @@ Sentence-BERT production route、canonical NLTK segmentation 與 shared objectiv
 | 檔案 | 修改內容 | 對應發現 | 驗證 |
 |---|---|---|---|
 | `src/eval/rouge.py` | ROUGE-Lsum；同一 reference 由最大 R1 選定；長度 mismatch fail；保留 legacy evaluator | F-2, F-8 | ✅ 兩個 5622 篇 artifacts 已重現 0.3857／0.3880；✅ regression tests；⏳ official files2rouge conformance（僅保留 SciTLDR 時） |
-| `src/eval/oracle.py` | greedy oracle reference CLI；已更正不得稱 exact upper bound，`max_words` 明確化 | F-1 | ✅ CLI/smoke；⏳ SciTLDR official single-sentence 52.4 conformance |
+| `src/eval/oracle.py` | greedy oracle reference CLI；已更正不得稱 exact upper bound，`max_words` 明確化 | F-1 | ✅ CLI/smoke；SciTLDR v1 不跑，official single-sentence 52.4 conformance 未排程 |
 | `src/features/graph.py` | thresholding 前先 `.copy()`，不再就地竄改呼叫端矩陣 | F-5 | ✅ 呼叫前後矩陣一致 |
 | `src/models/extractive/encoder_rank.py` | 模型快取、pinned revision、完整輸入 batch encode、截斷與成本 artifact | F-4 | ✅ CPU 與 3-row canonical smoke；⏳ 正式 cold/warm/GPU cost pilot |
 | `src/pipeline/optimizer_dispatch.py`、`src/objectives/evaluator.py` | `pop_size` / `n_gen` / `seed` 接線；移除 fallback；Greedy／GRASP／NSGA-II 共用 objective/constraints，保存 Pareto front | F-6, F-13f, F-3, F-7 | ✅ hand-computed、seed、no-fallback、pipeline regression；⏳ MMR/exact baseline 與 validation isolation |

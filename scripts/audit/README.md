@@ -34,6 +34,11 @@
 差值：R-1 `+0.0021` / R-2 `−0.0048` / R-Lsum `−0.0021`。
 **未做 paired significance test**，小差距不可宣稱勝負。
 
+⛔ **R-Lsum 那一欄已過期**（2026-07-30, PR #9）：evaluator 的分句器換成
+`src/data/sentence_split.py` 的共用 Punkt tokenizer，實測 R-Lsum 位移 **+0.0032**
+（R-1 / R-2 為 +0.0000，不受影響，`+0.0021` 與 `−0.0048` 仍有效）。
+表中三個 Lsum 值與 `−0.0021` 的差距都必須重跑本腳本才能再引用。
+
 ---
 
 ## `selection_diagnostics.py` — 病因：選句位置與重疊率

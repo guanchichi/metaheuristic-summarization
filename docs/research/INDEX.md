@@ -17,12 +17,12 @@
 
 → 詳見 `ACTION_PLAN.md` 的 Phase −1；這兩件事已被版本化為研究治理前提。**後續不得再以 legacy 結果直接改寫或支撐新論文。**
 
-### 目前進度速覽（2026-07-29）
+### 目前進度速覽（2026-07-30）
 
 | | 狀態 |
 |---|---|
-| Phase 1 程式契約 | 🟡 **大部分完成** —— route 獨立排名、provenance 進 selector、shared objective/constraint evaluator、source-vs-candidate length feasibility、Pareto artifact、canonical schema 與 frozen-policy preflight 已完成；published-protocol parity、GovReport/CNN-DM 資料層、正式成本 pilot 與 validation-frozen output policy 仍未完成；見 `ACTION_PLAN.md` Phase 1 |
-| 測試 | ✅ 200 項全過；CI 已接 GitHub Actions |
+| Phase 1 程式契約 | 🟡 **大部分完成** —— route 獨立排名、provenance 進 selector、shared objective/constraint evaluator、source-vs-candidate length feasibility、Pareto artifact、canonical schema 與 frozen-policy preflight 已完成；published-protocol parity、GovReport 資料層、正式成本 pilot 與 validation-frozen output policy 仍未完成；CNN/DailyMail 是 Gate 3 後的 optional 工作；見 `ACTION_PLAN.md` Phase 1 |
+| 測試 | ✅ 202 項全過（PR #9 合併後）；CI 已接 GitHub Actions |
 | **baseline** | 🔴 **完全沒做** —— Gate 2 的全部內容。沒有它，上面那條 F-0 永遠無法回答 |
 | 新 pipeline 的實測結果 | 🔴 **零** —— 還沒跑過任何 validation 評估 |
 | 資料 | 🟡 Multi-News validation main/clean policy、fingerprints 與 manifests 已凍結；GovReport 與其餘 splits 尚未完成 |
@@ -32,6 +32,17 @@
 >
 > 各項稽核發現的 legacy／新 pipeline 現況對照見
 > `CODE_AUDIT_IEEE_Access.md` **§0.0 狀態表**。
+
+### 實驗資料集到底跑哪些（2026-07-30）
+
+| 類別 | 決定 |
+|---|---|
+| **必跑 primary** | **原版 Multi-News + GovReport**：validation 做 baseline／方法選擇，configuration freeze 後才跑 official test |
+| **必跑 sensitivity** | Multi-News frozen U+FFFD clean sensitivity：5,549 rows，與 5,621-row main 作 paired validation；它不是 Multi-News+ 或 bad-retrieval-removed |
+| **延後可選** | CNN/DailyMail：只有 primary 過 Gate 3 且資源允許，才以 frozen method 跑 official test 11,490 作 appendix sanity；不阻塞主線 |
+| **v1 不跑** | SciTLDR-AIC、Multi-News+、bad-retrieval-removed、PubMed、Multi-XScience |
+
+完整執行規則以 `ACTION_PLAN.md` §2.0 為單一狀態來源；其他文件只解釋原因，不得自行擴張資料集。
 
 ---
 
@@ -82,6 +93,7 @@
 |---|---|
 | Legacy ExpB vs Lead（Multi-News 5622，同一新 evaluator） | `0.4352/0.1405/0.3880` vs `0.4331/**0.1453**/**0.3901**`；兩者皆只作診斷 |
 | Full benchmark 的 ROUGE-L → Lsum | 0.2014 → **0.3857**；ExpB 則是 0.2019 → **0.3880** |
+| ⛔ **所有 ROUGE-Lsum 數字已過期**（2026-07-30, PR #9） | 分句器換成共用 Punkt，實測 R-Lsum 位移 **+0.0032**（R-1/R-2 為 +0.0000，不受影響）。上面每個 Lsum 值重算前不得引用。詳見 `CLAUDE.md` §2 開頭 |
 | 系統選句與 Lead 重疊率 | **61.7%**；腳本已版本化並重現，但仍是 legacy artifact 上的 diagnostic |
 | 系統選句命中 legacy greedy reference 的比例 | **22.8%**；不是 official oracle recall，須以 validated oracle 重做 |
 | Headroom（200 篇抽樣 diagnostic） | Multi-News 0.152 / CNN-DM 0.171 / SciTLDR 0.190；非全集，不可引用為正式結果 |
