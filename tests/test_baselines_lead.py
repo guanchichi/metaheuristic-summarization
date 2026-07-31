@@ -118,6 +118,14 @@ def test_case1_document_order_normal_length_matched_case():
     assert budget["min_words_not_applied_reason"]
     assert budget["selected_words"] == 20
 
+    # length_gate is True here, so requested and applied upper bounds match:
+    # max_words=25 was both requested and enforced, and max_sentences was
+    # never set at all (genuinely absent, not withheld).
+    assert budget["max_words"] == 25
+    assert budget["requested_max_words"] == 25
+    assert budget["max_sentences"] is None
+    assert budget["requested_max_sentences"] is None
+
     evaluation = result["selection_evaluation"]
     assert evaluation["selected_words"] == 20
     assert evaluation["feasible"] is True
@@ -319,6 +327,58 @@ def test_fabbri_first_k_is_diagnostic_and_bypasses_the_length_gate():
     assert result["selection_evaluation"]["feasible"] is True
     assert result["objective_spec"]["method"] == "lead_fabbri_first_k"
     assert result["objective_spec"]["status"] == "baseline"
+
+    # The length gate is off, but the config's requested min_words (5) must
+    # still surface in the artifact -- not silently zeroed just because it
+    # is not enforced. min_words itself stays 0 since nothing is enforced.
+    assert result["output_budget"]["requested_min_words"] == 5
+    assert result["output_budget"]["min_words"] == 0
+    assert result["output_budget"]["min_words_applied"] is False
+
+    # Same principle for the upper bound: max_words=5 was requested but is
+    # not applied (max_words itself is None), and there was no requested
+    # max_sentences at all (genuinely absent, not withheld).
+    assert result["output_budget"]["requested_max_words"] == 5
+    assert result["output_budget"]["requested_max_sentences"] is None
+
+
+def test_fabbri_first_k_records_requested_upper_bounds_without_applying_them():
+    """cfg asks for max_words=250 and min_words=5; fabbri_first_k enforces
+    neither (length_gate=False), but the artifact must still show what was
+    requested -- distinct from the applied fields, which are None -- plus
+    the explicit length_gate=False marker, rather than silently zeroing or
+    nulling out the config's request."""
+
+    doc = _doc_three_documents_two_sentences_each()
+    cfg = {
+        "length_control": {
+            "unit": "words",
+            "max_words": 250,
+            "min_words": 5,
+            "require_nonempty": True,
+        }
+    }
+    result = summarize_one_lead(doc, cfg, ordering="fabbri_first_k", first_k=1)
+
+    budget = result["output_budget"]
+    assert budget["length_gate"] is False
+
+    # Applied values: nothing is enforced under this diagnostic ordering.
+    assert budget["max_words"] is None
+    assert budget["max_tokens"] is None
+    assert budget["max_sentences"] is None
+    assert budget["min_words"] == 0
+
+    # Requested values: preserved from length_control regardless of whether
+    # this ordering applies them.
+    assert budget["requested_max_words"] == 250
+    assert budget["requested_max_tokens"] is None
+    assert budget["requested_max_sentences"] is None
+    assert budget["requested_min_words"] == 5
+
+    # Explicit "not applied" markers, not an implicit None.
+    assert budget["min_words_applied"] is False
+    assert budget["min_words_not_applied_reason"]
 
 
 def test_objective_spec_and_candidate_pool_are_honestly_labelled():

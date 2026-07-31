@@ -147,28 +147,54 @@ def summarize_one_baseline(
 ) -> Dict[str, Any]:
     """Baseline analogue of ``select_sentences.summarize_one``.
 
-    When ``length_gate`` is True (the normal, length-matched case), the
-    active ``length_control`` upper bounds (``max_words``/``max_tokens``,
-    ``max_sentences``, ``require_nonempty``) are enforced through the exact
-    same ``resolve_selection_eligibility`` a system run uses -- not a
-    reimplementation of it. The lower bound is separate: when
-    ``apply_min_words`` is True (the default), it is enforced through
+    ``length_gate`` is the one explicit flag for whether ``length_control``'s
+    upper bounds are applied at all: ``max_words``/``max_tokens`` and
+    ``max_sentences`` are either all enforced (``length_gate=True``, through
+    the exact same ``resolve_selection_eligibility`` a system run uses -- not
+    a reimplementation of it) or none of them are (``length_gate=False``).
+    There is no separate per-field flag for the upper bounds because nothing
+    in this module currently applies them independently; if a future
+    ordering needs to enforce some of them but not others, ``length_gate``
+    must be split rather than re-overloaded.
+
+    Regardless of ``length_gate``, ``output_budget`` always records
+    ``requested_max_words``/``requested_max_tokens``/``requested_max_sentences``
+    -- what ``length_control`` actually asked for -- separately from
+    ``max_words``/``max_tokens``/``max_sentences``, which are the *applied*
+    values (``None`` when ``length_gate`` is False). A config's request must
+    never disappear from the artifact just because a given ordering does not
+    apply it.
+
+    The lower bound (``min_words``) has its own, narrower toggle,
+    ``apply_min_words``, because Lead needs to disable *only* the floor while
+    still enforcing the ceiling (``length_gate=True``, ``apply_min_words=
+    False``): when True (the default), it is enforced through
     ``resolve_effective_min_words`` exactly like a system run; when False,
     ``SelectionConstraints.min_words`` is forced to 0 regardless of what
-    ``length_control.min_words`` requests. ``resolve_effective_min_words``
-    is still called in both cases so ``requested_min_words`` and
-    ``source_capacity_words`` are always recorded -- turning the floor off
-    must never make the requested value disappear from the artifact.
-    ``min_words_not_applied_reason`` is required (fail loud, not silently
-    omitted) whenever ``apply_min_words`` is False and ``length_gate`` is
-    True, and is recorded verbatim as ``output_budget.min_words_not_applied_reason``.
+    ``length_control.min_words`` requests. ``resolve_effective_min_words`` is
+    called whenever ``length_gate`` is True, independent of
+    ``apply_min_words`` -- i.e. "both cases" means both values of
+    ``apply_min_words``, not both values of ``length_gate`` -- so
+    ``requested_min_words`` and ``source_capacity_words`` are always
+    populated whenever the upper bounds are active, even if the floor itself
+    is not. ``min_words_not_applied_reason`` is required (fail loud, not
+    silently omitted) whenever ``apply_min_words`` is False and
+    ``length_gate`` is True, and is recorded verbatim as
+    ``output_budget.min_words_not_applied_reason``.
 
     When ``length_gate`` is False, no word/sentence budget is enforced at
     all (only ``require_nonempty``); this only exists for baseline variants
     that are explicitly *not* comparable to a fixed-budget system run (see
     ``lead.py``'s ``fabbri_first_k`` mode) and every such row must be
     unmistakably labelled as a diagnostic, never plotted next to a
-    length-matched Gate 2 comparison.
+    length-matched Gate 2 comparison. ``resolve_effective_min_words`` is not
+    called in this branch at all (there is no active upper bound to compute
+    a subset-sum capacity against), so ``source_capacity_words`` and
+    ``candidate_capacity_words`` are ``None`` here -- not a dropped request,
+    but a genuinely undefined quantity: "how many words fit under a cap"
+    has no answer when no cap applies. ``requested_min_words`` is still
+    populated directly from ``length_control.min_words`` (that part never
+    needed ``resolve_effective_min_words`` to begin with).
     """
 
     if length_gate and not apply_min_words and min_words_not_applied_reason is None:
@@ -181,6 +207,13 @@ def summarize_one_baseline(
     sentence_records = flatten_sentence_records(doc)
     sentences = [record["text"] for record in sentence_records]
     budget = resolve_length_budget(cfg)
+
+    # What length_control actually asked for, independent of length_gate --
+    # computed once so both branches below read the same values rather than
+    # risking two independently hand-written copies drifting apart.
+    requested_max_words = budget.selector_budget if budget.unit == "words" else None
+    requested_max_tokens = budget.selector_budget if budget.unit == "tokens" else None
+    requested_max_sentences = budget.max_sentences
 
     if length_gate:
         min_words_resolution = resolve_effective_min_words(
@@ -215,9 +248,12 @@ def summarize_one_baseline(
             min_words_applied = False
             resolved_not_applied_reason = min_words_not_applied_reason
         output_budget_length_fields = {
-            "max_words": budget.selector_budget if budget.unit == "words" else None,
-            "max_tokens": budget.selector_budget if budget.unit == "tokens" else None,
-            "max_sentences": budget.max_sentences,
+            "max_words": requested_max_words,
+            "max_tokens": requested_max_tokens,
+            "max_sentences": requested_max_sentences,
+            "requested_max_words": requested_max_words,
+            "requested_max_tokens": requested_max_tokens,
+            "requested_max_sentences": requested_max_sentences,
             "min_words": effective_min_words,
             "requested_min_words": min_words_resolution.requested_min_words,
             "effective_min_words": effective_min_words,
@@ -235,12 +271,27 @@ def summarize_one_baseline(
         constraint_max_sentences = None
         effective_min_words = 0
         output_budget_length_fields = {
+            # Applied values: None because length_gate is False, no upper
+            # bound of any kind is enforced for this ordering (see
+            # lead.py's fabbri_first_k docstring). The single explicit
+            # "is this applied" marker is output_budget.length_gate itself,
+            # not the presence/absence of these fields.
             "max_words": None,
             "max_tokens": None,
             "max_sentences": None,
+            # Requested values: always populated from length_control,
+            # regardless of whether this ordering applies them -- a config
+            # asking for max_words=250 must still show up here even though
+            # fabbri_first_k never enforces it.
+            "requested_max_words": requested_max_words,
+            "requested_max_tokens": requested_max_tokens,
+            "requested_max_sentences": requested_max_sentences,
             "min_words": 0,
-            "requested_min_words": 0,
+            "requested_min_words": budget.requested_min_words,
             "effective_min_words": 0,
+            # Undefined, not dropped: "words that fit under a cap" has no
+            # answer when no cap applies (resolve_effective_min_words /
+            # maximum_feasible_words are never called in this branch).
             "source_capacity_words": None,
             "candidate_capacity_words": None,
             "min_words_relaxed": False,
