@@ -96,9 +96,10 @@ MVP 的通過條件沿用 §10 Freeze gate 的第一條，但只要求單一 pri
 |---|---|---|---|
 | Primary A | **GovReport** | 保留，先做 validation pilot | 長單文件、長摘要，最適合檢驗全局 coverage、scaling 與 adaptive routing；官方約 19.5k 筆，常用 split 為 17,517/973/973，CC BY 4.0。本機尚未下載，正式採用前須驗證原始檔、split、checksum 與 section 可用性。 |
 | Primary B | **Multi-News** | 保留；validation 已重建，其他 split 待補 | 官方 split 44,972/5,622/5,622，適合 cross-document coverage 與去重。pinned validation 已重建為 5,621 筆 structurally valid canonical rows，保存 document boundaries，並凍結 main／clean sensitivity policy；train/test 仍待生成，legacy 扁平資料不得用於正式結果。 |
-| Data-quality sensitivity | **Multi-News bad-retrieval-removed / Multi-News+** | 不取代主 benchmark，作 paired sensitivity | 原版有錯誤 retrieval 與無關文件；官方 Multi-News repo 已提供 bad-retrieval-removed 版本，Multi-News+ 另用 LLM 清理。必須保存 mapping、版本與移除規則，不能把兩者混成一個新 split。 |
-| Sanity | CNN/DailyMail | Appendix／sanity | 官方 test 11,490；lead bias 強、文件較短，不是核心方法的理想主場，但可檢查方法是否退化。 |
-| Protocol stress | SciTLDR-AIC | 僅在 official conformance 通過後保留 | 官方單句抽取使 redundancy 與 subset search 幾乎失效；使用 files2rouge 與 max-R1-reference。不能用它證明多目標選句有效。 |
+| Required data-quality sensitivity | **Multi-News U+FFFD clean sensitivity** | 必跑 validation paired sensitivity | 由 frozen 72-row manifest 從 5,621-row main 排除，得到 5,549 rows；只回答 replacement-character rows 是否改變結論，不等於 retrieval cleaning。main 結果仍是 primary。 |
+| Optional retrieval sensitivity | **Multi-News bad-retrieval-removed / Multi-News+** | v1 不跑 | 原版有錯誤 retrieval 與無關文件，但兩個外部 variant 的清理規則與現有 U+FFFD clean sensitivity 不同；若日後納入，必須另存 mapping、版本與移除規則。 |
+| Optional sanity | CNN/DailyMail | Gate 3 後才決定，v1 不阻塞 | 官方 test 11,490；lead bias 強、文件較短。只有兩個 primary 已過 gate 且資源允許，才以 frozen method 跑 appendix sanity，不用它調參或支撐核心主張。 |
+| Excluded from v1 | SciTLDR-AIC | 不排程 | 官方單句抽取使 redundancy 與 subset search 幾乎失效，與核心多句方法不匹配。若日後重新納入，必須在看結果前修改矩陣並先通過 files2rouge、single-sentence 與 max-R1-reference conformance。 |
 | Reserve | PubMed | GovReport 不可用或 pilot 失敗時再評估 | 長科學文件可作替代，但不要一開始同時擴張三個主資料集。 |
 
 ### 1.2 不可再共用的「假統一」
@@ -325,7 +326,7 @@ NSGA-II 只有同時滿足下列至少一項，才保留在論文核心：
 - selected sentences 以凍結的 deterministic ordering 輸出；預設保留 source document order 與 sentence order。
 - 每句保存 sentence_id、route provenance、final objectives 與選取理由。
 - 保存 data fingerprint、commit、config hash、model revision、hardware、seed、runtime 分解與 peak memory。
-- evaluator 依資料集分開：多句資料使用驗證後的 Lsum protocol；SciTLDR 使用官方 files2rouge。
+- evaluator 依 task protocol 分開：v1 的 GovReport／Multi-News 使用驗證後的 Lsum protocol；SciTLDR 若日後重新納入才使用官方 files2rouge。
 - 所有 route/selector failure 都是 failed run，不產生看似正常的 predictions。
 
 ## 9. 必跑消融矩陣
@@ -339,7 +340,7 @@ NSGA-II 只有同時滿足下列至少一項，才保留在論文核心：
 | adaptive routing 是否值得？ | all-routes-always vs deterministic router |
 | NSGA-II 是否必要？ | greedy/MMR/facility-location vs NSGA-II，同候選同 objective |
 | objective 是否有基數偏誤？ | sum vs mean/length-normalized + length distribution |
-| 資料噪音是否改變結論？ | original Multi-News vs bad-retrieval-removed/Multi-News+ paired subset |
+| U+FFFD rows 是否改變結論？ | frozen 5,621-row Multi-News main vs 共同 5,549 rows 的 clean sensitivity paired analysis；external retrieval-cleaned variants 不屬 v1 |
 
 每個 ablation 必須同時報 quality、實際輸出長度、candidate recall、route unique contribution、runtime 與 memory。
 

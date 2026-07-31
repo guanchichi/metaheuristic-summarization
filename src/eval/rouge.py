@@ -10,21 +10,28 @@ IMPORTANT (2026-07 audit fix):
     Perl ROUGE / pyrouge are not automatically comparable; every local
     baseline must be rescored through the same evaluator.
 
-    Reproduced legacy diagnostics on Multi-News (n=5622):
+    Reproduced legacy diagnostics on Multi-News (n=5622), computed with the
+    original regex-based sentence splitter (``(?<=[.!?。！？])\\s+``), now
+    replaced by the shared Punkt tokenizer below -- these numbers must be
+    recomputed under the new segmentation before being cited again:
         full_benchmark_result: rougeL=0.2014, rougeLsum=0.3857
         ExpB_K20_Max_Coverage: rougeL=0.2019, rougeLsum=0.3880
     Both runs are test-tuned legacy artifacts and are invalid as new-paper
-    results; the numbers only demonstrate metric sensitivity.
+    results regardless of segmentation; the numbers only demonstrated metric
+    sensitivity.
 
     ``rougeLsum`` only works if BOTH prediction and reference have their
-    sentences separated by ``\\n``.  ``_as_lsum`` below guarantees that.
+    sentences separated by ``\\n``.  ``_as_lsum`` below guarantees that,
+    using the same sentence tokenizer as the Multi-News canonical
+    preprocessing pipeline (``src/data/sentence_split.py``), so a "sentence"
+    means the same thing on the data side and the evaluation side.
 """
 
 from typing import Dict, List, Sequence, Union
 import re
 
-# Split after . ! ? (also CJK 。！？) followed by whitespace.
-_SENT_SPLIT = re.compile(r"(?<=[.!?。！？])\s+")
+from src.data.sentence_split import split_sentences
+
 _WS = re.compile(r"\s+")
 
 DEFAULT_METRICS = ("rouge1", "rouge2", "rougeLsum")
@@ -49,7 +56,7 @@ def _as_lsum(text: str, presegmented: bool = False) -> str:
     if presegmented:
         return "\n".join(p.strip() for p in text.split("\n") if p.strip())
     text = _WS.sub(" ", text)  # collapse newlines/tabs -> single spaces
-    return "\n".join(p.strip() for p in _SENT_SPLIT.split(text) if p.strip())
+    return "\n".join(p.strip() for p in split_sentences(text) if p.strip())
 
 
 def _new_scorer(metrics: Sequence[str], use_stemmer: bool):

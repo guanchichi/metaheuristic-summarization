@@ -44,6 +44,11 @@ test 就已經被用於模型選擇，那個 split 對這批設定而言已經�
 **這是 metric 定義改變，不是模型變好。** 而且這幾個目錄已無 `predictions.jsonl`，
 無法重算，只能當歷史紀錄。
 
+⛔ 右欄兩個 `rougeLsum` 值**連當歷史紀錄都要加注**（2026-07-30, PR #9）：
+它們是在舊的 regex 分句器下算的，現行 evaluator 已改用共用 Punkt tokenizer，
+實測位移約 **+0.003**。因為 `predictions.jsonl` 已不存在，**這兩個數字永遠無法在
+新協定下重算**——任何情況下都不得寫進論文。
+
 另外所有 CNN/DailyMail 相關的舊 run 使用 **13,368 筆 validation**，
 不是官方 11,490 筆 test，因此不能與文獻 test 數字並排比較。
 

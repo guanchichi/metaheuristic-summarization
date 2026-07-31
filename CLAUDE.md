@@ -35,12 +35,39 @@
 
 以下是目前證據快照。若 evaluator、資料、artifact 或程式版本改變，必須重新驗證；不得用「不要重新推導」阻止更正。證據與方法見 `docs/research/CODE_AUDIT_IEEE_Access.md`。
 
+### ⛔ 全域警告：所有既有的 ROUGE-Lsum 數字都已過期（2026-07-30，PR #9）
+
+`src/eval/rouge.py` 的分句器已從手寫 regex `(?<=[.!?。！？])\s+` 換成
+`src/data/sentence_split.py` 的共用 Punkt tokenizer。舊 regex 在每個縮寫句點後都切一刀
+（`"Mr. Smith met U.S. officials on Tuesday."` 會被切成三句），是真的 bug。
+
+**這份文件裡出現的每一個 ROUGE-Lsum 數字，都是在舊分句器下量到的，重算前不得再引用。**
+
+| | 舊 regex | 新 Punkt | 差 |
+|---|---|---|---|
+| ROUGE-1 | 0.4316 | 0.4316 | +0.0000 |
+| ROUGE-2 | 0.1444 | 0.1444 | +0.0000 |
+| **ROUGE-Lsum** | 0.3893 | 0.3925 | **+0.0032** |
+
+（800 篇真實 validation、Lead-style extract、245-word budget 實測。）
+
+適用範圍：
+- **R-1 與 R-2 完全不受影響**——它們不看句界，數值仍然有效。
+- **只有 R-Lsum 位移**，量級約 +0.003。
+- 資料側沒有變：`preprocess_multinews.py` 本來就用 Punkt、縮寫清單相同，
+  **canonical fingerprint 與凍結的 data policy 不受影響**。
+
 ### 🔴 兩個致命問題（會決定論文能不能投）
 
 1. **legacy Multi-News 當家配置沒有贏過本地 Lead**
    全 5622 篇、ID 對齊、同一 Google `rouge_score` evaluator：
    系統 `0.4352 / 0.1405 / 0.3880` vs Lead（245 whitespace words）`0.4331 / 0.1453 / 0.3901`
    → R-2 和 R-Lsum 輸。這證明舊稿的全面勝出主張不成立；因系統 config 是在 test 上選出，數字只作 legacy diagnostic。CNN/DM 的 0.351 與文獻 Lead-3 0.4042 來自不同 split/evaluator，不得稱為公平勝負。
+
+   ⚠️ **分句器更換後的適用範圍**：R-1 的 `+0.0021` 與 **R-2 的 `−0.0048` 仍然成立**（不受句界影響）。
+   R-Lsum 的兩個值（`0.3880` / `0.3901`）都是舊分句器下的量測，**其 `−0.0021` 的差距尚未在新分句器下重新驗證**。
+   兩邊會一起往上位移，方向大機率不變，但「未變」目前是推測不是實測。
+   **F-0 的核心結論不受影響**：R-2 落後這一項本身就足以否定「across every metric」。
 
 2. **11 個 Multi-News tuning/ablation runs 使用 test set 選設定**
    `runs/tuning_experiments/` 底下 11 個 run **全部是 5622 篇 = test set**，
@@ -70,7 +97,7 @@ greedy reference 不是 official oracle、未做 paired test。新 validation pi
 
 | 事實 | 數值 |
 |---|---|
-| 多句資料的新內部協定採 **ROUGE-Lsum** | Full benchmark 0.2014 → **0.3857**；ExpB 0.2019 → **0.3880**（皆為 legacy diagnostic） |
+| 多句資料的新內部協定採 **ROUGE-Lsum** | Full benchmark 0.2014 → **0.3857**；ExpB 0.2019 → **0.3880**（皆為 legacy diagnostic）。⛔ **兩個 Lsum 值都是舊 regex 分句器下量的，見本節開頭的全域警告，重算前不得引用** |
 | 論文的 SciTLDR "oracle" 0.136 | 是資料集 `rouge_scores` 欄位的全句平均，**不是 oracle** |
 | legacy greedy references（非官方、非 exact upper bound） | SciTLDR 3句 0.5136；Multi-News 245 words 約 0.59；不得直接引用 |
 | SciTLDR **官方**協定 | 單句、files2rouge、以最大 R1 選定同一 reference；oracle 52.4 / PACSUM 28.7 / BERTSumExt 36.2 |
@@ -90,6 +117,14 @@ greedy reference 不是 official oracle、未做 paired test。新 validation pi
 - 多句摘要的新內部協定使用 `rougeLsum`；`rouge_scores_legacy()` 只保留重現舊 artifact。SciTLDR 必須另用其官方 files2rouge／ROUGE-L 協定，不能套用這條多句規則。
 - ⚠️ pred 與 ref **必須用同一個函式分句**。原始換行是雜訊不是句界
   （370/500 predictions 含雜訊換行，references 一個都沒有；不一致會低估 ~0.023）
+- 🚫 **不要再寫任何新的分句 regex。** 句界的唯一權威是 `src/data/sentence_split.py`
+  的共用 Punkt tokenizer，資料側（`preprocess_multinews.py`）與評測側（`eval/rouge.py`）
+  都必須走它。「一句」在兩邊必須是同一個意思。
+  ⚠️ `src/data/preprocess.py:13` 還留著第三個 regex（`\s*`，比舊的更兇），
+  目前只餵 `backend/`（展示用）與 CNN/DM legacy 前處理。**P0-02 若要復活 CNN/DM，
+  必須先把它換成共用 tokenizer**，否則會重蹈 F-2。
+- Punkt 不處理 CJK `。！？`（舊 regex 有）。三個資料集都是英文，目前無影響；
+  若日後加入 CJK 資料集，必須先擴充 `sentence_split.py`。
 
 ### 已套用並通過 regression tests
 

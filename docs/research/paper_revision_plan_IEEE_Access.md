@@ -1,6 +1,6 @@
 # IEEE Access 全面重建計畫
 
-版本：2026-07-26 技術稽核版 ｜ 程式／資料狀態覆核：2026-07-29
+版本：2026-07-26 技術稽核版 ｜ 程式／資料狀態覆核：2026-07-30
 適用範圍：ICACT 得獎論文的期刊擴充、ICT Express 拒稿稿件、metaheuristic-summarization 研究程式與既有實驗結果
 
 文件治理：本文件是研究標準與投稿 gate 的唯一規範來源；`ACTION_PLAN.md` 是日常執行清單；`CODE_AUDIT_IEEE_Access.md` 與 `STRATEGY_ASSESSMENT.md` 只能作證據快照與衍生判斷。若數字衝突，以可重現 artifact、版本化程式、資料 fingerprint 與明確 evaluator protocol 為準，而不是以任何一份敘述文件為準。
@@ -59,7 +59,7 @@
 | **P0-02** | CNN/DM 用 validation 卻比文獻 test | 🟡 **舊結果作廢；是否重建取決於實驗矩陣** | 尚無 CNN/DM canonical artifact。若保留為 sanity check，必須重建官方 test；若從新稿移除，則不得再引用舊 CNN/DM 勝負 |
 | P0-03 | Stage-1 top-K 與實作不符 | ✅ **已修** | 各 route 在完整輸入排名；`route_top_k` 只定義 proposal depth，`min_per_route` 才是保留額 |
 | P0-04 | Stage 2 沒有融合 BERT 分數 | ✅ **已修** | semantic route + `selector.salience_source: rrf_fusion`；實測改變 semantic 分數會改變選句 |
-| P0-05 | SciTLDR oracle 與 multi-reference | 🟡 內文已有狀態標註 | `preprocess_scitldr` 已存 `references: list`；official conformance 仍為條件式 |
+| P0-05 | SciTLDR oracle 與 multi-reference | ✅ **v1 已排除；重新納入才重開** | `preprocess_scitldr` 已存 `references: list`；v1 不跑 SciTLDR，因此 official conformance 不阻塞目前主線 |
 | P0-06 | ROUGE-L 協定錯誤 | ✅ **已修**（parity 待驗） | `rougeLsum` + 手算 golden tests；與 published Perl ROUGE 的 parity 尚未驗證 |
 | P0-07 | NSGA-II 參數與 config 不一致 | ✅ **已修** | `pop_size`/`n_gen`/`seed` 已接線、移除靜默 fallback、有 regression test |
 | P0-08 | 公式與實作多處不一致 | 🟡 **部分修** | 已修：TF-ISF v2 改用非負平滑、graph 不再就地竄改、τ 已接線。**仍未修：`length_scores` 除以「文件內觀察最大值」而非論文的 `min(len/40,1)`；`centrality` 與 `novelty` 完全反相關** |
@@ -475,17 +475,18 @@ Reviewer #4 的判斷基本正確：NSGA-II、centroid PLM ranking、thresholded
 | Dataset | 與核心多目標方法的適配 | 建議角色 | 原因 |
 |---|---|---|---|
 | Multi-News（原版） | 高 | 主要 benchmark | 多文件、多句、長 budget，coverage、cross-document redundancy、route cost 都有實際意義；保留原版才能與既有文獻直接比較，但必須重建 document boundaries。 |
-| Multi-News bad-retrieval-removed / Multi-News+ | 高 | paired data-quality sensitivity | 用相同樣本 mapping 檢查 irrelevant-document contamination；不得取代或混成主 benchmark，也不得把不同清理規則視為同一 split。 |
+| Multi-News frozen U+FFFD clean | 高 | v1 必跑 paired sensitivity | 在共同 5,549 rows 比較 main／clean，只回答 replacement-character rows 的影響；不得取代 5,621-row main。 |
+| Multi-News bad-retrieval-removed / Multi-News+ | 高 | reserve，v1 不跑 | 可檢查 irrelevant-document contamination，但與 frozen U+FFFD clean 是不同問題；不得混成同一 sensitivity。 |
 | GovReport | 高 | 建議新增的第二主要 benchmark | 長單文件、summary 也長，重要資訊分散，適合測 adaptive routing、全局 coverage 與長度擴展性。 |
-| CNN/DailyMail | 中低 | sanity / generalization | lead bias 強、文件相對短；用來證明方法沒有只適用多文件，但不適合當主要創新舞台。 |
-| SciTLDR-AIC | 低 | extreme-compression stress test | 官方主設定只抽一個 source sentence，redundancy objective 幾乎恆為零，多目標搜尋退化；只有在公平重跑至少追上 PACSUM 時才保留。 |
+| CNN/DailyMail | 中低 | Gate 3 後 optional sanity | lead bias 強、文件相對短；不阻塞核心 Gate，不用於方法選擇。 |
+| SciTLDR-AIC | 低 | v1 排除 | 官方主設定只抽一個 source sentence，redundancy objective 幾乎恆為零，多目標搜尋退化；與核心多句方法不匹配。 |
 | Multi-XScience | 中 | 科學多文件的可選外部驗證 | 題目與 graph/cross-document 關係相符，但資料與 reference 偏 abstractive，不能取代 extractive-aligned 主 benchmark。 |
 
 資源有限時的推薦配置：
 
-1. 兩個 primary datasets：GovReport（長單文件）與原版 Multi-News（多文件）；bad-retrieval-removed／Multi-News+ 作 paired data-quality sensitivity。
-2. CNN/DailyMail 作 sanity check，可放次表或 supplement。
-3. SciTLDR 先作 diagnostic；若 corrected validation/test 仍低於公平 PACSUM，不進主張，只在 limitations 或 appendix 說明失敗。
+1. 兩個 primary datasets：GovReport（長單文件）與原版 Multi-News（多文件）；frozen U+FFFD clean 作必跑 paired sensitivity。bad-retrieval-removed／Multi-News+ 不屬 v1。
+2. CNN/DailyMail 不列入核心 Gate；只有兩個 primary 已通過 validation Gate 3 且計算資源允許，才以 frozen method 跑官方 test 11,490 作次表／supplement sanity。
+3. SciTLDR 不列入 v1 執行矩陣，不產生新結果表。若投稿前要恢復，必須在看結果前修改 `ACTION_PLAN.md` §2.0，並先通過 official evaluator conformance。
 
 若不想新增資料集，最低可行配置是 Multi-News 為主、CNN/DailyMail 為次、SciTLDR 降為 stress test；但對 IEEE Access 的說服力低於加入一個真正的長文件 benchmark。
 
@@ -638,16 +639,19 @@ Prediction record：
 
 ## 5. 資料集與切分協定
 
-### 5.1 CNN/DailyMail
+### 5.1 CNN/DailyMail（條件式 optional sanity，非 v1 核心）
 
-- 使用本地完整官方 split：train 287,113、validation 13,368、test 11,490。
+- 本節只有在 `ACTION_PLAN.md` §2.0 正式把 CNN/DailyMail 納入後才執行；目前不阻塞 Gate 2／3。
+- 若納入，使用本地完整官方 split：train 287,113、validation 13,368、test 11,490。
 - 本研究無 task-specific training 時，train 可不用；validation 仍只能用來選 K、權重與 route policy。
 - test 只在 configuration freeze 後執行。
 - 主設定採標準三句輸出，並回報平均 words 與 model tokens。
 - Lead-3 必須是主表第一個 sanity baseline。
 - 不得隱藏 first-25-sentence truncation；若研究長文件截斷，另做 sensitivity。
 
-### 5.2 SciTLDR-AIC
+### 5.2 SciTLDR-AIC（v1 排除；以下是重新納入時的先決條件）
+
+目前不排程、不跑新結果、不放比較表。以下條目不是現行待辦；只有在 test 前修改已凍結的實驗矩陣、說明重新納入理由後才啟用。
 
 - 先依官方 paper、dataset card 與 evaluation code重建 split。
 - 不再把多個 target 串成一個 reference。
@@ -672,9 +676,9 @@ Baseline 必須按 training regime 分組，不能把不同資源條件混成一
 
 ### 6.1 Sanity baselines
 
-- Lead-3：CNN/DailyMail。
+- Lead-3：CNN/DailyMail（僅在 optional sanity 被正式納入時）。
 - Lead under same word budget：Multi-News。
-- Lead-1：SciTLDR。
+- Lead-1：SciTLDR（v1 不跑；只有重新納入 official stress protocol 時）。
 - Random with fixed seeds。
 - Exact 或 greedy extractive oracle。
 
@@ -769,10 +773,11 @@ Secondary：
 
 ### E1. Main results
 
-- 三個 dataset 的完整 official test。
+- 兩個 primary datasets（GovReport、原版 Multi-News）的完整 official test。
 - 分組報 sanity、no-task-training、supervised reference、LLM。
 - 所有本地 baseline 使用同一 evaluator。
-- SciTLDR-AIC 額外設 protocol-conformance gate：官方 split、單句限制、files2rouge、max-R1-reference aggregation、R1/R2/RL 與 oracle 全部對齊後才可產生比較表。
+- Multi-News main 是 primary 結果；frozen clean sensitivity 只在共同 rows 報 paired 差異。
+- CNN/DailyMail 只有在 Gate 3 後預先納入才追加 frozen official-test sanity；SciTLDR-AIC v1 不跑。
 
 ### E2. Optimizer isolation
 
@@ -1003,7 +1008,7 @@ IEEE Access 的 reproducibility guidance 特別要求 artifact dependencies、in
 
 - 接受 F-0 的正確範圍：legacy Multi-News 未穩定勝過同協定 Lead；CNN/DailyMail 尚無公平勝負。
 - 決定路線 A、B 或 C；預設選 A。
-- 選定 primary benchmarks；預設 GovReport + 原版 Multi-News，bad-retrieval-removed／Multi-News+ 作 paired data-quality sensitivity。
+- 選定 primary benchmarks：GovReport + 原版 Multi-News；frozen U+FFFD clean 作必跑 paired sensitivity，external retrieval-cleaned variants 不屬 v1。
 - 固定 primary metrics 與 Go/No-Go。
 - 以明確 commit `1b9fe6f` 標記 legacy，而不是標記含未提交修改的工作目錄。
 - 寫 canonical method specification。
@@ -1029,7 +1034,7 @@ IEEE Access 的 reproducibility guidance 特別要求 artifact dependencies、in
 
 ### Phase 2：data/baseline validation，1 週
 
-- 重建兩個 primary datasets；CNN/DailyMail 可作 sanity，SciTLDR 僅在 conformance 成本合理且結果有解釋價值時才作 optional stress protocol。
+- 重建兩個 primary datasets；CNN/DailyMail 僅為 Gate 3 後 optional sanity，SciTLDR v1 不跑。
 - 跑 Lead、TextRank、LexRank、PacSum、Sentence-BERT centroid。
 - 驗證 official split；多句資料採明確保留句界的 ROUGE-Lsum；只有保留 SciTLDR 時，才用官方 files2rouge、單句與 max-R1-reference 協定重現官方 oracle。
 
@@ -1045,7 +1050,7 @@ IEEE Access 的 reproducibility guidance 特別要求 artifact dependencies、in
 
 ### Phase 4：locked test，約 1 週計算時間
 
-- 全 dataset、全 seeds。
+- 兩個 frozen primary datasets、全 seeds；只追加已在 test 前預先納入的 optional sanity。
 - paired statistics。
 - runtime/memory。
 - 生成 immutable artifacts。
@@ -1069,14 +1074,14 @@ IEEE Access 的 reproducibility guidance 特別要求 artifact dependencies、in
 
 - [ ] 所有 P0 關閉。
 - [ ] test 從未用於調參。
-- [ ] CNN/DailyMail 使用 11,490 筆 test。
-- [ ] **條件式**：若 SciTLDR 保留在實驗中，使用官方 split、files2rouge、單句限制與 max-R1-reference 並重現官方 oracle；否則明確從實驗矩陣移除。
+- [ ] **條件式**：若 Gate 3 後正式納入 CNN/DailyMail optional sanity，使用 11,490 筆 official test；未納入則從新稿結果表完全移除。
+- [x] SciTLDR 已從 v1 實驗矩陣移除；若日後重新納入，須先重開 official split／files2rouge／單句／max-R1-reference conformance gate。
 - [x] Multi-News validation data-quality 規則已在新結果前固定為 versioned main + paired clean sensitivity policy；train/test 仍須各自受版本化 policy／manifest 管理。
 - [x] 新 canonical pipeline 的 Stage 1 真正輸出各 route top-K ranked candidates，並保存 provenance／reservation／guard。
 - [x] 新 canonical pipeline 的 Stage 2 使用真實、可追溯的 PLM/graph/statistical route scores；route 效果仍待 validation ablation。
 - [x] 新 canonical pipeline 的 NSGA effective parameters、seed、objective 與 Pareto artifact 可追溯；最終 output policy 仍待 validation freeze。
 - [x] 新 canonical pipeline 的 candidate／feature／optimizer failure 無 silent fallback；legacy 路徑不得產生新稿結果。
-- [ ] 多句資料的 ROUGE-Lsum 與 sentence boundaries 正確；SciTLDR 的官方 ROUGE-L 協定另行驗證。
+- [ ] GovReport／Multi-News 的 ROUGE-Lsum、共用 Punkt sentence boundaries 與 published-protocol parity 全部驗證；SciTLDR 不屬 v1。
 - [ ] 強 baseline 在同一 evaluator 下重跑。
 - [ ] 5 至 10 seeds、paired 95% CI、multiple-comparison correction。
 - [ ] full pipeline runtime、memory、hardware 完整。

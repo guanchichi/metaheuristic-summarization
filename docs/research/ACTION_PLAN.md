@@ -3,7 +3,7 @@
 > 這是**唯一的執行清單**。研究標準以 `paper_revision_plan_IEEE_Access.md` 為準；程式稽核與策略評估的結論全部收斂到這裡。
 > 每天工作看這份就好，需要理由再回去翻對應的分析文件。
 >
-> 版本：2026-07-29 ｜ 進度標記：`[ ]` 未開始 `[~]` 進行中 `[x]` 完成 `[!]` 卡住
+> 版本：2026-07-30 ｜ 進度標記：`[ ]` 未開始 `[~]` 進行中 `[x]` 完成 `[!]` 卡住
 
 ---
 
@@ -49,8 +49,8 @@
 
 - [x] 選定研究路線：**研究主計畫路線 A（方法型）**；是否成功仍由 validation Go/No-Go 決定
       → 核心方法貢獻 = **打破候選池的 lead bias + provenance-aware fusion + budget-aware routing**
-- [x] 選定主 benchmark：**GovReport + 原版 Multi-News**；Multi-News clean variant 作 paired data-quality sensitivity，PubMed 是需另作資料／成本 pilot 的替代
-      → CNN/DM 降為 sanity check、SciTLDR 降為 stress test
+- [x] 選定主 benchmark：**GovReport + 原版 Multi-News**；目前 frozen 的 Multi-News clean variant 只作 U+FFFD paired sensitivity，PubMed 是需另作資料／成本 pilot 的替代
+      → CNN/DM 是通過 Gate 3 後才考慮的 optional sanity；SciTLDR 不列入 v1 排程
 - [x] 寫下 **Go/No-Go 條件**（研究主計畫 §9 與 `ARCHITECTURE.md` freeze gate）；最終 configuration 仍須 validation 後簽字凍結
 - [x] 寫下 **canonical method specification**：`ARCHITECTURE.md` 為技術規格來源；目前是 Target Architecture v1，尚未 freeze
 
@@ -95,9 +95,9 @@
 
 **1a 的共同驗收條件**（全部完成才能把上面的 `[~]` 改成 `[x]`）：
 
-- [x] `pip install pytest` 並讓 `tests/` 能跑（2026-07-28：200 passed）
-- [~] Phase 1 canonical 主路徑的 patch 已有 golden／regression／10-document snapshot；TF-IDF/TF-ISF similarity parity、published-protocol parity 與尚未實作的多資料集路徑不在現有 200 tests 的完成範圍
-- [ ] **條件式**：若保留 SciTLDR stress test，official single-sentence oracle 須重現 R1 ≈ 52.4；若不保留，維持 evaluator fail-closed 即可，不阻塞 Phase 1
+- [x] `pip install pytest` 並讓 `tests/` 能跑（2026-07-30：202 passed）
+- [~] Phase 1 canonical 主路徑的 patch 已有 golden／regression／10-document snapshot；TF-IDF/TF-ISF similarity parity、published-protocol parity 與尚未實作的多資料集路徑不在現有 202 tests 的完成範圍
+- [x] v1 已排除 SciTLDR，因此 official single-sentence oracle conformance 不屬目前 Phase 1；evaluator 維持 fail-closed。若日後重新納入，須重開此 gate
 
 ### 1b. 資料層
 
@@ -108,7 +108,7 @@
 - [~] 已實作從 pinned 作者資料重建 Multi-News，保存 boundary、source order、raw char span、hash 與 original-to-cleaned mapping；validation 的 5,621-row main 與 5,549-row clean sensitivity 已生成並受 frozen policy 守門，train/test 與各自 manifest 仍待生成。legacy 扁平 `sentences` 不得進正式實驗
 - [ ] 下載並驗證 GovReport 官方資料：split、row count、checksum、license、section metadata 與異常列規則
 - [x] `max_words / max_sentences / max_model_tokens / candidate_budget / compute_budget` 已拆成不同設定與 output artifact；`unit: words` 不再繞過 selector
-- [ ] 重建 **CNN/DM 官方 split**：train 287,113 / validation 13,368 / **test 11,490**
+- [ ] **條件式**：只有 Gate 3 通過且決定保留 CNN/DM optional sanity，才重建其 canonical validation／官方 **test 11,490**；不得使用舊 validation 結果冒充 test
 - [~] 資料健檢器已實作：筆數、ID、split、文件／reference／每列句數分布、U+FFFD、debug subset、revision 與 checksum；完整 pinned Multi-News validation 已生成並保存摘要證據，其他 split／dataset 報告仍待完成
       （validation：5,622 raw → 5,621 canonical，1 列空來源排除；72 列／1,042 個 U+FFFD 依 frozen policy 保留於 main 並排除於 paired clean sensitivity；58 個 singleton clusters；412 列少於 20 句；最大 3,347 句，單句最長 2,638 words）
 
@@ -147,7 +147,7 @@
 - [x] GitHub Actions unit-test CI：push／PR 到 `master` 自動 compile + `python -m pytest -q`；正式 benchmark 不納入輕量 CI
 - [x] TF-ISF v1/v2、length、position v1/v2 的手算 golden tests；測試明確記錄 legacy repetition/length/lead bias，不把現況誤認為已驗證的優良公式
 - [x] `rougeL` vs `rougeLsum`、pred/ref 對稱分句、corpus guard 與 per-example mean alignment golden tests
-- [~] SciTLDR max-ROUGE-1 選定同一 reference 的 aggregation rule 已依官方 `cal-rouge.py` 釘住；只有決定保留 SciTLDR 時，才需再完成 local `rouge-score` 對官方 `files2rouge` 的數值 conformance
+- [x] SciTLDR max-ROUGE-1 選定同一 reference 的 aggregation rule 已有 regression；v1 不跑 SciTLDR，故不排程 local `rouge-score` 對官方 `files2rouge` 的數值 conformance。重新納入時才重開
 - [x] Graph：diagonal、threshold、dangling node、sparse edge bound
 - [x] 候選 top-K rank、union boundary、route reservation（含短文件 shortfall）、RRF selector handoff、route provenance 與 document guard 測試
 - [x] canonical schema 與 production prediction 已保存 Multi-News document boundaries／selected sentence provenance；candidate route 與 enabled feature 均 fail loud
@@ -163,19 +163,30 @@
 
 > **這階段的唯一目的：確認新架構真的比 Lead 好。沒過就不要往下走。**
 
-- [ ] 🔴 **先跑 Lead** —— 最便宜的 reality check，優先於一切
-      - CNN/DM：Lead-3
-      - GovReport：同 word budget 的 Lead
-      - Multi-News：同 word budget 的 Lead
-      - SciTLDR：Lead-1（僅在保留 stress test 時）
-- [ ] TextRank、LexRank（本地執行同 pipeline；優先重用官方／可信實作並鎖版本）
-- [ ] PacSum
-- [ ] Sentence-BERT centroid + MMR
-- [ ] Random（固定 seed）
-- [ ] Exact extractive oracle（可行時）或明確標示的 greedy reference（不可稱 upper bound）
-- [ ] **條件式 SciTLDR evaluator conformance**：只有決定保留 stress test 才使用官方 `files2rouge`、單句限制與 max-R1-reference，並重現 oracle R1 ≈ 52.4；否則不執行也不報 SciTLDR 結果
+### 2.0 執行資料集矩陣 v1（2026-07-30 決定）
 
-**Gate 2**：兩個 primary benchmark 的 baseline 在各自明確 evaluator 下跑出合理數字；若保留 SciTLDR，才追加官方 oracle conformance gate。
+| 資料集／分析 | v1 決策 | Phase 2–3 | Phase 4 locked test | 是否阻塞主線 |
+|---|---|---|---|---|
+| **原版 Multi-News main** | **必跑 Primary B** | 5,621-row frozen validation | configuration freeze 後跑 canonical official test | ✅ 是 |
+| **Multi-News clean sensitivity** | **必跑 paired sensitivity** | 同一 validation 排除 frozen U+FFFD 72-row manifest，5,549 rows | 只有在 test policy 於看分數前另行版本化後才跑 paired test | ✅ validation sensitivity 是 |
+| **GovReport** | **必跑 Primary A** | canonical validation；不用 train 做 task-specific training | configuration freeze 後跑 official test | ✅ 是 |
+| CNN/DailyMail | **延後、可選 sanity** | 不用於 Gate 2／3 調參或核心方法選擇 | 只有兩個 primary 過 Gate 3 且資源允許，才以 frozen method 跑 official test 11,490 | ❌ 否 |
+| SciTLDR-AIC | **v1 排除，不排程** | 不跑 | 不跑 | ❌ 否；若重新納入，須先改本表並通過 official files2rouge／single-sentence conformance |
+| Multi-News bad-retrieval-removed／Multi-News+ | **目前不跑** | 與現有 U+FFFD clean sensitivity 是不同分析，不得混稱 | 不跑 | ❌ 否 |
+| PubMed／Multi-XScience | **reserve，目前不跑** | 不跑 | 不跑 | ❌ 否 |
+
+> 「不用 train」只表示 proposed method 不做 task-specific training；若日後納入需要訓練的比較系統，必須另列 training regime，不能混入 no-task-training 主表。
+
+- [ ] 🔴 **先在兩個 primary 跑 Lead** —— GovReport 與 Multi-News 都使用同 word budget；這是最便宜的 reality check，優先於一切
+- [ ] 在兩個 primary 跑 TextRank、LexRank（本地執行同 pipeline；優先重用官方／可信實作並鎖版本）
+- [ ] 在兩個 primary 跑 PacSum
+- [ ] 在兩個 primary 跑 Sentence-BERT centroid + MMR
+- [ ] 在兩個 primary 跑 Random（固定 seed）
+- [ ] 在兩個 primary 跑 exact extractive oracle（可行時）或明確標示的 greedy reference（不可稱 upper bound）
+- [ ] Multi-News main／clean sensitivity 對共同 5,549 rows 報 paired 差異；不得把 clean 分數取代 5,621-row main 結果
+- [x] SciTLDR 不屬 v1 Gate 2；不執行、不報新比較表。若日後重新納入，先修改本矩陣，再完成官方 `files2rouge`、單句限制、max-R1-reference 與 oracle R1 ≈ 52.4 conformance
+
+**Gate 2**：兩個 primary benchmark 的 baseline 在各自明確 evaluator 下跑出合理數字。v1 沒有 SciTLDR gate。
 
 ---
 
@@ -215,7 +226,7 @@
 - [ ] Optimizer isolation：固定 features/candidates/budget，只換 Greedy / GRASP / NSGA-II
 - [ ] Ablation：No-statistical / No-graph / No-PLM / No-provenance / No-routing
 - [ ] Route utility：各路 unique candidate recall、quality delta、latency 與 peak memory；無增量效果的 route 刪除
-- [ ] 原版 Multi-News 與 bad-retrieval-removed／Multi-News+ 的 paired data-quality sensitivity，不混用 split
+- [ ] 原版 Multi-News main 與 frozen 5,549-row U+FFFD clean sensitivity 作 paired validation 分析；bad-retrieval-removed／Multi-News+ 是未排程的另一種 retrieval-contamination 研究，不得混稱
 
 **Gate 3** 🔴：
 - 在 validation 上，至少一個主 benchmark明顯勝過強 no-task-training baseline；另一個至少 non-inferior 或形成預先定義的 cost Pareto 優勢
@@ -228,7 +239,7 @@
 
 ## Phase 4：正式 test ⏱️ 約 1 週計算
 
-- [ ] 全 dataset、全 seeds（≥5，建議 10）、一次性執行
+- [ ] 兩個 frozen primary datasets、全 seeds（≥5，建議 10）、一次性執行；只有在 Phase 2.0 已預先納入的 optional dataset 才能追加
 - [ ] Paired bootstrap（≥10,000 resamples）、95% CI、Holm correction
 - [ ] Runtime / memory：模型只載入一次，分開報 cold-start 與 warmed inference
 - [ ] Quality–latency Pareto 圖（**用完整 pipeline 成本**，不是單一元件）
@@ -303,7 +314,7 @@
 |---|---|---|---|
 | −1 決策與凍結 | `[x]` | ✅ | 研究路線、primary benchmarks、Go/No-Go、Target Architecture v1、legacy tag 與 invalid-run 標記均已版本化；最終 configuration freeze 屬 Phase 3 |
 | 0 專案整理 | `[~]` | | archive 已隔離、requirements/CI 已整理；死碼、非論文模組與 lockfile 仍待處理 |
-| 1 正確性重構 | `[~]` | 核心內部 Gate 1 tests 已滿足 | 200 tests、10-document snapshot、shared objectives、Multi-News validation policy/preflight 已完成；外部 evaluator parity、GovReport/CNN-DM、正式成本 pilot 與 validation-frozen output policy 仍待補 |
+| 1 正確性重構 | `[~]` | 核心內部 Gate 1 tests 已滿足 | 202 tests、10-document snapshot、shared objectives、Multi-News validation policy/preflight 已完成；外部 evaluator parity、GovReport、正式成本 pilot 與 validation-frozen output policy 仍待補；CNN/DM 是 Gate 3 後 optional |
 | 2 Baseline | `[ ]` | | |
 | 3 方法開發 | `[ ]` | | 🔴 中途檢查點在這 |
 | 4 正式 test | `[ ]` | | |
