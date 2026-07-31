@@ -142,13 +142,26 @@ def summarize_one_baseline(
     method: str,
     select_fn: SelectFn,
     length_gate: bool = True,
+    apply_min_words: bool = True,
+    min_words_not_applied_reason: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Baseline analogue of ``select_sentences.summarize_one``.
 
     When ``length_gate`` is True (the normal, length-matched case), the
-    active ``length_control`` budget is enforced through the exact same
-    ``resolve_effective_min_words`` / ``resolve_selection_eligibility``
-    functions a system run uses -- not a reimplementation of them.
+    active ``length_control`` upper bounds (``max_words``/``max_tokens``,
+    ``max_sentences``, ``require_nonempty``) are enforced through the exact
+    same ``resolve_selection_eligibility`` a system run uses -- not a
+    reimplementation of it. The lower bound is separate: when
+    ``apply_min_words`` is True (the default), it is enforced through
+    ``resolve_effective_min_words`` exactly like a system run; when False,
+    ``SelectionConstraints.min_words`` is forced to 0 regardless of what
+    ``length_control.min_words`` requests. ``resolve_effective_min_words``
+    is still called in both cases so ``requested_min_words`` and
+    ``source_capacity_words`` are always recorded -- turning the floor off
+    must never make the requested value disappear from the artifact.
+    ``min_words_not_applied_reason`` is required (fail loud, not silently
+    omitted) whenever ``apply_min_words`` is False and ``length_gate`` is
+    True, and is recorded verbatim as ``output_budget.min_words_not_applied_reason``.
 
     When ``length_gate`` is False, no word/sentence budget is enforced at
     all (only ``require_nonempty``); this only exists for baseline variants
@@ -157,6 +170,12 @@ def summarize_one_baseline(
     unmistakably labelled as a diagnostic, never plotted next to a
     length-matched Gate 2 comparison.
     """
+
+    if length_gate and not apply_min_words and min_words_not_applied_reason is None:
+        raise ValueError(
+            "apply_min_words=False requires an explicit min_words_not_applied_reason "
+            "so the artifact never silently drops why the requested floor was skipped"
+        )
 
     validate_experiment_document(cfg, doc)
     sentence_records = flatten_sentence_records(doc)
@@ -183,18 +202,31 @@ def summarize_one_baseline(
         ineligible_sentences = eligibility.ineligible_sentences
         constraint_max_length: Optional[int] = budget.selector_budget
         constraint_max_sentences = budget.max_sentences
-        effective_min_words = min_words_resolution.effective_min_words
+        if apply_min_words:
+            effective_min_words = min_words_resolution.effective_min_words
+            min_words_relaxed = min_words_resolution.min_words_relaxed
+            relaxation_reason = min_words_resolution.relaxation_reason
+            min_words_applied = True
+            resolved_not_applied_reason = None
+        else:
+            effective_min_words = 0
+            min_words_relaxed = False
+            relaxation_reason = None
+            min_words_applied = False
+            resolved_not_applied_reason = min_words_not_applied_reason
         output_budget_length_fields = {
             "max_words": budget.selector_budget if budget.unit == "words" else None,
             "max_tokens": budget.selector_budget if budget.unit == "tokens" else None,
             "max_sentences": budget.max_sentences,
-            "min_words": min_words_resolution.effective_min_words,
+            "min_words": effective_min_words,
             "requested_min_words": min_words_resolution.requested_min_words,
-            "effective_min_words": min_words_resolution.effective_min_words,
+            "effective_min_words": effective_min_words,
             "source_capacity_words": min_words_resolution.source_capacity_words,
             "candidate_capacity_words": min_words_resolution.source_capacity_words,
-            "min_words_relaxed": min_words_resolution.min_words_relaxed,
-            "relaxation_reason": min_words_resolution.relaxation_reason,
+            "min_words_relaxed": min_words_relaxed,
+            "relaxation_reason": relaxation_reason,
+            "min_words_applied": min_words_applied,
+            "min_words_not_applied_reason": resolved_not_applied_reason,
         }
     else:
         eligible_indices = list(range(len(sentences)))
@@ -213,6 +245,12 @@ def summarize_one_baseline(
             "candidate_capacity_words": None,
             "min_words_relaxed": False,
             "relaxation_reason": None,
+            "min_words_applied": False,
+            "min_words_not_applied_reason": (
+                "length_gate is disabled entirely for this diagnostic ordering "
+                "(no word/sentence budget of any kind is enforced, min_words "
+                "included); see src/baselines/lead.py's fabbri_first_k docstring"
+            ),
         }
 
     eligible_records = [sentence_records[index] for index in eligible_indices]
@@ -268,6 +306,11 @@ def summarize_one_baseline(
             "unit": budget.unit,
             "require_nonempty": budget.require_nonempty,
             "length_gate": length_gate,
+            "selected_words": (
+                selection_evaluation["selected_words"]
+                if selection_evaluation is not None
+                else 0
+            ),
             **output_budget_length_fields,
         },
         "task_profile": doc.get("task_profile"),

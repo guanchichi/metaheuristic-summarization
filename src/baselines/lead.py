@@ -62,20 +62,53 @@ implicit:
     length-matched Gate 2 comparison.
 
 Every mode still goes through ``src.baselines.contract.summarize_one_baseline``,
-which enforces length feasibility via ``src.objectives.evaluator``'s shared
-``resolve_effective_min_words`` / ``resolve_selection_eligibility`` -- the
-exact same functions a system run uses -- rather than a re-derived
-approximation of them.
+which enforces the length upper bounds (``max_words``/``max_tokens``,
+``max_sentences``, ``require_nonempty``) via ``src.objectives.evaluator``'s
+shared ``resolve_selection_eligibility`` -- the exact same function a system
+run uses -- rather than a re-derived approximation of it. Those upper bounds
+still fail loud per document via ``assert_feasible`` rather than silently
+padding or truncating the summary, consistent with this project's
+no-silent-fallback rule (CLAUDE.md section 3). A document that fails this
+way is a genuine fact about how hard Lead is on that document, not a bug to
+paper over.
 
-A strict prefix can, in principle, fall short of the corpus-wide
-``effective_min_words`` bar even after the per-document relaxation (e.g. one
-early sentence consumes most of the budget and the next eligible sentence no
-longer fits, while a later, shorter sentence would have). When that happens
-``summarize_one_baseline`` raises loudly via ``assert_feasible`` rather than
-silently padding the summary -- consistent with this project's no-silent-
-fallback rule (CLAUDE.md section 3). A document that fails this way is a
-genuine fact about how hard Lead is on that document, not a bug to paper
-over.
+MIN_WORDS DOES NOT APPLY TO LEAD -- DECIDED AFTER AN EMPIRICAL CHECK, NOT
+ASSUMED
+--------------------------------------------------------------------------
+The lower bound (``length_control.min_words``) is different from the upper
+bounds above: every call into ``summarize_one_baseline`` below passes
+``apply_min_words=False``, so ``SelectionConstraints.min_words`` is always 0
+for Lead regardless of what the config requests. This is a deliberate
+exception, not an oversight, for two independent reasons (see
+``LEAD_MIN_WORDS_NOT_APPLIED_REASON`` below for the artifact-recorded form):
+
+  1. Technical: ``resolve_effective_min_words`` relaxes a requested floor
+     down to ``maximum_feasible_words``, which is the exact bitset
+     subset-sum over an *arbitrary* subset of the eligible sentences. A
+     strict reading-order prefix cannot exploit an arbitrary subset -- its
+     attainable totals are a much sparser, discrete set of landing points --
+     so the relaxed ``[min_words, max_words]`` window can be structurally
+     unreachable for a prefix even when it is reachable for some other
+     subset of the very same sentences. The relaxation therefore gives a
+     prefix baseline no real protection against the failure mode it exists
+     to prevent.
+  2. Methodological: ``docs/research/ACTION_PLAN.md`` item 1e records why
+     ``min_words=200`` exists at all -- as a guard against a mean-salience
+     selection objective degenerating to a single high-scoring sentence.
+     Lead has no selection objective to degenerate (it only ever fills the
+     prefix greedily until the next sentence would no longer fit), so that
+     guard does not apply to it either.
+
+The empirical distribution of selected word counts under this exception
+(the full-split min_words=0 measurement, zero infeasible documents, and the
+cross-validated 72-vs-140-row breakdown of why 3.77% of documents land
+under 200 words) is recorded in
+``docs/research/CODE_AUDIT_IEEE_Access.md`` finding F-16, not duplicated
+here -- a per-run number belongs in one place so it cannot go stale in two.
+Every Lead row still records ``output_budget.min_words_applied: false``,
+the untouched ``requested_min_words`` (never silently dropped), and
+``LEAD_MIN_WORDS_NOT_APPLIED_REASON`` below, so the exception is auditable
+per document rather than assumed.
 """
 
 from __future__ import annotations
@@ -86,6 +119,21 @@ from src.baselines.contract import SelectFn, summarize_one_baseline
 from src.objectives.evaluator import SelectionObjective
 
 ORDERINGS = ("document_order", "round_robin", "fabbri_first_k")
+
+LEAD_MIN_WORDS_NOT_APPLIED_REASON = (
+    "min_words is not enforced for Lead; see the 'MIN_WORDS DOES NOT APPLY "
+    "TO LEAD' section of src/baselines/lead.py's module docstring for the "
+    "full argument. Summary: (1) technical -- resolve_effective_min_words "
+    "relaxes toward maximum_feasible_words, an arbitrary-subset bitset "
+    "subset-sum, but Lead can only take a reading-order prefix, so the "
+    "relaxed [min_words, max_words] window can be structurally unreachable "
+    "for a prefix even when it is reachable for some other subset of the "
+    "same sentences; (2) methodological -- ACTION_PLAN.md item 1e "
+    "introduced min_words=200 to stop a mean-salience objective "
+    "degenerating to a single sentence, and Lead has no such objective to "
+    "degenerate. Empirical distribution: see "
+    "docs/research/CODE_AUDIT_IEEE_Access.md finding F-16."
+)
 
 
 def _group_by_source_order(
@@ -148,12 +196,34 @@ def _select_fabbri_first_k(
     *,
     first_k: int,
 ) -> List[int]:
+    """First ``first_k`` eligible sentences of every source document.
+
+    ``can_add`` is unconditionally True today: ``_resolve_ordering`` only
+    ever invokes this ordering with ``length_gate=False``, so the evaluator's
+    ``max_length``/``max_sentences`` are both None and the sole remaining way
+    ``can_add`` could return False -- a duplicate index -- never happens
+    across per-document slices. The ``break`` below is therefore dead code
+    right now; it exists only so the stopping rule reads the same as
+    ``_select_document_order``/``_select_round_robin``, not because it
+    currently changes any output.
+
+    This ordering's semantics are per-document top-k, not a length-gated
+    prefix: Fabbri et al. 2019's own definition has no total-length budget
+    at all, it always takes exactly ``first_k`` sentences from every
+    document regardless of how long the concatenation ends up. If
+    ``length_gate`` is ever turned on for this ordering, ``break`` would
+    start silently truncating a document's ``first_k`` quota whenever the
+    *global* budget is tight -- at that point this is no longer Fabbri's
+    definition, it is a length-gated prefix wearing its name. Enabling
+    ``length_gate`` here requires first deciding whether the result should
+    still be called ``fabbri_first_k``.
+    """
     groups = _group_by_source_order(eligible_records)
     selected: List[int] = []
     for key in sorted(groups.keys(), key=lambda value: value):
         for relative_index in groups[key][:first_k]:
             if not evaluator.can_add(selected, relative_index):
-                continue
+                break
             selected.append(relative_index)
     return selected
 
@@ -180,7 +250,12 @@ def summarize_one_lead(
     ordering: str = "document_order",
     first_k: int = 3,
 ) -> Dict[str, Any]:
-    """Lead-baseline analogue of ``select_sentences.summarize_one``."""
+    """Lead-baseline analogue of ``select_sentences.summarize_one``.
+
+    ``min_words`` is never enforced for Lead -- see this module's
+    ``LEAD_MIN_WORDS_NOT_APPLIED_REASON`` and the "MIN_WORDS DOES NOT APPLY
+    TO LEAD" section of the module docstring.
+    """
 
     select_fn, length_gate = _resolve_ordering(ordering, first_k)
     return summarize_one_baseline(
@@ -189,4 +264,6 @@ def summarize_one_lead(
         method=f"lead_{ordering}",
         select_fn=select_fn,
         length_gate=length_gate,
+        apply_min_words=False,
+        min_words_not_applied_reason=LEAD_MIN_WORDS_NOT_APPLIED_REASON,
     )

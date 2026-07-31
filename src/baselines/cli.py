@@ -7,6 +7,15 @@ its helpers directly (``read_jsonl``/``write_jsonl_atomic``/``now_stamp``/
 produces the same run-directory layout and provenance artifacts
 (``config_used.json``, ``dataset_preflight.json``, ``time_select_seconds.txt``)
 as a system run, and can be scored by ``src.pipeline.evaluate`` unchanged.
+
+``baseline_run.json`` is written alongside those, deliberately separate from
+``config_used.json``: the latter is a verbatim dump of the config YAML, and
+mixing CLI-only invocation flags into it would blur "the config that was
+used" with "how this particular run was invoked". ``--baseline``,
+``--ordering``, and ``--first_k`` are CLI arguments, not config fields --
+without a dedicated file, two ``document_order``/``round_robin`` Lead runs
+against the same config are indistinguishable from their run directories
+alone.
 """
 
 from __future__ import annotations
@@ -121,6 +130,15 @@ def main():
 
     with open(os.path.join(out_dir, "config_used.json"), "w", encoding="utf-8") as f:
         json.dump(cfg, f, ensure_ascii=False, indent=2)
+    baseline_run = {
+        "baseline": args.baseline,
+        "ordering": args.ordering,
+        "first_k": args.first_k,
+        "split": args.split,
+        "input": args.input,
+    }
+    with open(os.path.join(out_dir, "baseline_run.json"), "w", encoding="utf-8") as f:
+        json.dump(baseline_run, f, ensure_ascii=False, indent=2)
     if dataset_preflight is not None:
         with open(os.path.join(out_dir, "dataset_preflight.json"), "w", encoding="utf-8") as f:
             json.dump(dataset_preflight, f, ensure_ascii=False, indent=2)
